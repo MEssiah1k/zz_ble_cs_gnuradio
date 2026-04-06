@@ -1,0 +1,59 @@
+id: usrp_ble_interact_center
+label: interact_center
+category: '[usrp_ble]'
+
+templates:
+  imports: from gnuradio import usrp_ble
+  make: usrp_ble.interact_center(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms})
+  callbacks:
+  - set_start_btn(${start_btn})
+  - set_stop_btn(${stop_btn})
+  - set_wait_time_ms(${wait_time_ms})
+
+#  Make one 'parameters' list entry for every parameter you want settable from the GUI.
+#     Keys include:
+#     * id (makes the value accessible as keyname, e.g. in the make entry)
+#     * label (label shown in the GUI)
+#     * dtype (e.g. int, float, complex, byte, short, xxx_vector, ...)
+#     * default
+parameters:
+- id: sample_rate
+  label: Sample Rate
+  dtype: int
+  default: 1000000
+- id: start_btn
+  label: Start
+  dtype: int
+  default: 0
+- id: stop_btn
+  label: Stop
+  dtype: int
+  default: 0
+- id: wait_time_ms
+  label: Wait Time (ms)
+  dtype: float
+  default: 100.0
+
+inputs:
+- label: in
+  domain: stream
+  dtype: complex
+
+outputs:
+- label: send1_ctrl
+  domain: message
+  id: send1_ctrl
+- label: send2_ctrl
+  domain: message
+  id: send2_ctrl
+- label: store1_ctrl
+  domain: message
+  id: store1_ctrl
+- label: store2_ctrl
+  domain: message
+  id: store2_ctrl
+- label: freq_ctrl
+  domain: message
+  id: freq_ctrl
+
+file_format: 1

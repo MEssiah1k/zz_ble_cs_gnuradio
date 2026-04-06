@@ -1,0 +1,36 @@
+id: usrp_ble_data_store
+label: data_store
+category: '[usrp_ble]'
+
+templates:
+  imports: from gnuradio import usrp_ble
+  make: usrp_ble.data_store(${data_len}, ${path})
+
+#  Make one 'parameters' list entry for every parameter you want settable from the GUI.
+#     Keys include:
+#     * id (makes the value accessible as keyname, e.g. in the make entry)
+#     * label (label shown in the GUI)
+#     * dtype (e.g. int, float, complex, byte, short, xxx_vector, ...)
+#     * default
+parameters:
+- id: data_len
+  label: Data Length
+  dtype: int
+  default: 10000
+- id: path
+  label: Save Path
+  dtype: string
+  default: /tmp
+
+inputs:
+- label: in
+  domain: stream
+  dtype: complex
+- label: command
+  domain: message
+  optional: 1
+
+outputs: []
+
+file_format: 1
+
