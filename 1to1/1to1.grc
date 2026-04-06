@@ -183,6 +183,38 @@ blocks:
     coordinate: [600, 1112.0]
     rotation: 0
     state: enabled
+- name: blocks_multiply_conjugate_cc_0
+  id: blocks_multiply_conjugate_cc
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1456, 888.0]
+    rotation: 0
+    state: enabled
+- name: blocks_multiply_conjugate_cc_0_0
+  id: blocks_multiply_conjugate_cc
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1448, 1024.0]
+    rotation: 0
+    state: enabled
 - name: blocks_multiply_xx_0
   id: blocks_multiply_xx
   parameters:
@@ -671,7 +703,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1864, 280.0]
+    coordinate: [1008, 256.0]
     rotation: 0
     state: disabled
 - name: uhd_usrp_sink_0_0_0_0
@@ -1384,7 +1416,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2144, 272.0]
+    coordinate: [1288, 248.0]
     rotation: 0
     state: disabled
 - name: uhd_usrp_source_0_0
@@ -1863,13 +1895,14 @@ blocks:
     affinity: ''
     alias: ''
     comment: ''
-    data_len: '10000000'
+    data_len: '200'
     path: /home/mess1ah/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator
+    skip_len: '30000'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1576, 744.0]
+    coordinate: [1720, 892.0]
     rotation: 0
     state: true
 - name: usrp_ble_data_store_0_0
@@ -1878,43 +1911,14 @@ blocks:
     affinity: ''
     alias: ''
     comment: ''
-    data_len: '10000000'
+    data_len: '200'
     path: /home/mess1ah/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector
+    skip_len: '30000'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1552, 856.0]
-    rotation: 0
-    state: true
-- name: usrp_ble_data_store_0_0_0
-  id: usrp_ble_data_store
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    data_len: '10000000'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/1to1/data_reflector_ref_local
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [640, 432.0]
-    rotation: 0
-    state: true
-- name: usrp_ble_data_store_0_1
-  id: usrp_ble_data_store
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    data_len: '10000000'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/1to1/data_initiator_ref_local
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [632, 536.0]
+    coordinate: [1712, 1028.0]
     rotation: 0
     state: true
 - name: usrp_ble_interact_center_0
@@ -1925,10 +1929,11 @@ blocks:
     comment: ''
     maxoutbuf: '0'
     minoutbuf: '0'
+    repeat_total: '3'
     sample_rate: '100000000'
     start_btn: start_button
     stop_btn: stop_button
-    wait_time_ms: '1000.0'
+    wait_time_ms: '10'
   states:
     bus_sink: false
     bus_source: false
@@ -1938,16 +1943,18 @@ blocks:
     state: true
 
 connections:
+- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0, '1']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0_0, '1']
 - [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0, '0']
 - [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0_0, '0']
-- [analog_sig_source_x_0_1, '0', usrp_ble_data_store_0_0_0, '0']
-- [analog_sig_source_x_0_1, '0', usrp_ble_data_store_0_1, '0']
+- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_data_store_0, '0']
+- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_data_store_0_0, '0']
 - [blocks_multiply_xx_0, '0', uhd_usrp_sink_0_0_0_0, '0']
 - [blocks_multiply_xx_0_0, '0', uhd_usrp_sink_0_0_0_0, '1']
-- [uhd_usrp_source_0_0, '0', usrp_ble_data_store_0_0, '0']
+- [uhd_usrp_source_0_0, '0', blocks_multiply_conjugate_cc_0_0, '0']
+- [uhd_usrp_source_0_0, '1', blocks_multiply_conjugate_cc_0, '0']
 - [uhd_usrp_source_0_0, '1', qtgui_freq_sink_x_0, '0']
 - [uhd_usrp_source_0_0, '1', qtgui_time_sink_x_0, '0']
-- [uhd_usrp_source_0_0, '1', usrp_ble_data_store_0, '0']
 - [usrp_ble_data_send_0, '0', blocks_multiply_xx_0, '1']
 - [usrp_ble_data_send_0, '0', usrp_ble_interact_center_0, '0']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_0, '1']
@@ -1956,9 +1963,7 @@ connections:
 - [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_data_send_0, command]
 - [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_data_send_0_0, command]
 - [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_0, command]
-- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_0_0_0, command]
 - [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_0_0, command]
-- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_0_1, command]
 
 metadata:
   file_format: 1

@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <cstring>
 #include <algorithm>
+#include <cstdio>
 
 /*
  * 文件说明：
@@ -36,23 +37,28 @@ namespace gr {
      * 这是 GNU Radio 常见的 make() 包装，用于隐藏具体实现类并统一创建对象。
      */
     data_store::sptr
-    data_store::make(int data_len, const std::string& path)
+    data_store::make(int data_len, int skip_len, const std::string& path)
     {
       return gnuradio::make_block_sptr<data_store_impl>(
-        data_len, path); // 把外部配置参数原样传给具体实现类构造函数
+        data_len, skip_len, path); // 把外部配置参数原样传给具体实现类构造函数
     }
 
     // 构造函数：
     // 1. 声明该块为单输入、零输出的 sync_block
     // 2. 保存配置参数
     // 3. 注册消息输入端口，用于接收开始/停止保存命令
-    data_store_impl::data_store_impl(int data_len, const std::string& path)
+    data_store_impl::data_store_impl(int data_len, int skip_len, const std::string& path)
       : gr::sync_block("data_store",
               gr::io_signature::make(1 /* min inputs */, 1 /* max inputs */, sizeof(input_type)), // 单输入口，输入类型是 gr_complex
               gr::io_signature::make(0 /* min outputs */, 0 /*max outputs */, 0)),                // 零输出口，因为这是 sink block
         _data_len(data_len),            // 保存单次任务的目标样本数
+        _skip_len(skip_len),            // 保存开始写有效样本前要跳过的前导样本数
         _path(path),                    // 保存目录路径
+        _freq_index(-1),                // 默认没有收到频点元信息
+        _repeat_index(-1),              // 默认没有收到重复元信息
         _is_saving(false),              // 初始状态下不保存
+        _is_skipping(false),            // 初始时不处于跳过前导样本阶段
+        _skipped_samples_count(0),      // 初始时前导样本跳过计数为 0
         _saved_samples_count(0),        // 初始时当前文件写入计数为 0
         _file_index(0)                  // 第一份文件从编号 0 开始
     {
@@ -72,9 +78,21 @@ namespace gr {
     void data_store_impl::handle_msg(pmt::pmt_t msg)
     {
         // 只处理符号类型消息，其他消息直接忽略。
-        if (pmt::is_symbol(msg)) {
+        if (pmt::is_dict(msg)) {
+            pmt::pmt_t cmd_key = pmt::intern("cmd");
+            pmt::pmt_t cmd_val = pmt::dict_ref(msg, cmd_key, pmt::PMT_NIL);
+            if (pmt::is_symbol(cmd_val) && pmt::symbol_to_string(cmd_val) == "store_start") {
+                pmt::pmt_t freq_val = pmt::dict_ref(msg, pmt::intern("freq_index"), pmt::from_long(-1));
+                pmt::pmt_t repeat_val = pmt::dict_ref(msg, pmt::intern("repeat_index"), pmt::from_long(-1));
+                _freq_index = pmt::to_long(freq_val);
+                _repeat_index = pmt::to_long(repeat_val);
+                start_saving();
+            }
+        } else if (pmt::is_symbol(msg)) {
             std::string cmd = pmt::symbol_to_string(msg); // 把 PMT symbol 转成普通字符串命令
             if (cmd == "store_start") {
+                _freq_index = -1;
+                _repeat_index = -1;
                 start_saving(); // 开始一次新的保存任务
             } else if (cmd == "store_stop") {
                 stop_saving(); // 立即停止当前保存任务
@@ -148,11 +166,20 @@ namespace gr {
         }
 
         // 每次保存都生成一个新的文件名，避免覆盖历史数据。
-        std::string filename = _path + "/data_" + std::to_string(_file_index++) + ".bin"; // 文件名自增
+        std::string filename;
+        if (_freq_index >= 0 && _repeat_index >= 0) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "/data_f%02d_r%02d.bin", _freq_index, _repeat_index);
+            filename = _path + buf;
+        } else {
+            filename = _path + "/data_" + std::to_string(_file_index++) + ".bin"; // 兼容旧控制消息时仍然使用自增文件名
+        }
 
         _file.open(filename, std::ios::binary); // 以二进制模式打开文件，避免文本模式干扰
         if (_file.is_open()) {
             _is_saving = true;         // 打开成功后正式进入保存态
+            _is_skipping = true;       // 每次开始新文件时，先进入前导过渡带跳过阶段
+            _skipped_samples_count = 0;
             _saved_samples_count = 0;  // 新文件的计数重新从 0 开始
         } else {
              std::cerr << "Failed to open file: " << filename << std::endl;
@@ -177,19 +204,33 @@ namespace gr {
     {
       auto in = static_cast<const input_type*>(input_items[0]); // 取得输入复数采样缓冲区
 
-      if (_is_saving) {
-          // 默认尝试消费并写入本次 work 提供的全部采样点，
-          // 但不能超过单次保存任务的总长度上限。
-          int count = noutput_items; // 默认打算把这次收到的样本全部写进文件
-          if (_saved_samples_count + count > _data_len) {
-              count = _data_len - _saved_samples_count; // 超出上限时，只写剩余需要的那部分
+        if (_is_saving) {
+          int consumed = 0; // 记录本轮输入中已经处理到的位置
+
+          // 先丢弃固定数量的前导过渡样本，再开始记录有效样本。
+          if (_is_skipping) {
+              int skip_count = std::min(noutput_items, _skip_len - _skipped_samples_count);
+              _skipped_samples_count += skip_count;
+              consumed += skip_count;
+
+              if (_skipped_samples_count >= _skip_len) {
+                  _is_skipping = false;
+              }
           }
-          
-          if (count > 0) {
-            // 直接按原始 gr_complex 内存布局写入二进制文件，
-            // 后处理读取时需要使用相同的数据类型解释。
-            _file.write(reinterpret_cast<const char*>(in), count * sizeof(input_type)); // 直接把原始内存写入文件
-            _saved_samples_count += count;                                              // 累加已写入的样本数
+
+          // 跳过前导段之后，才真正把样本写盘。
+          if (!_is_skipping && consumed < noutput_items) {
+              int count = noutput_items - consumed; // 当前批次剩余样本都可以参与写盘
+              if (_saved_samples_count + count > _data_len) {
+                  count = _data_len - _saved_samples_count; // 超出上限时，只写剩余需要的那部分
+              }
+
+              if (count > 0) {
+                // 直接按原始 gr_complex 内存布局写入二进制文件，
+                // 后处理读取时需要使用相同的数据类型解释。
+                _file.write(reinterpret_cast<const char*>(in + consumed), count * sizeof(input_type)); // 从有效窗口起点开始写
+                _saved_samples_count += count;                                                         // 累加已写入的有效样本数
+              }
           }
 
           // 达到目标长度后自动结束当前文件写入。

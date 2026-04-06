@@ -32,7 +32,7 @@ namespace gr {
        * class. usrp_ble::data_store::make is the public interface for
        * creating new instances.
        */
-      static sptr make(int data_len, const std::string& path);
+      static sptr make(int data_len, int skip_len, const std::string& path);
     };
 
   } // namespace usrp_ble

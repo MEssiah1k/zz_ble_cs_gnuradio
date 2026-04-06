@@ -47,11 +47,16 @@ namespace gr {
     {
      private:
       int _data_len;                 // 单次保存任务的目标长度，达到该值后自动停止保存
+      int _skip_len;                 // 开始写有效样本前，先跳过多少个前导样本
       std::string _path;             // 数据目录路径，生成的 .bin 文件会保存在这个目录下
+      int _freq_index;               // 当前文件所属的频点编号，由 interact_center 通过消息下发
+      int _repeat_index;             // 当前文件所属的重复编号，由 interact_center 通过消息下发
       bool _is_saving;               // 当前是否处于写盘状态，false 时只消费输入不写文件
+      bool _is_skipping;             // 当前是否仍处于前导过渡带跳过阶段
+      int _skipped_samples_count;    // 当前这一个文件中已经跳过了多少个前导样本
       int _saved_samples_count;      // 当前这一个文件中已经累计写入了多少个采样点
       std::ofstream _file;           // 当前输出文件流对象，负责实际的二进制写盘
-      int _file_index;               // 文件自增编号，用于生成 data_0.bin、data_1.bin 等名字
+      int _file_index;               // 兜底自增编号，仅在没有显式元信息时用于文件名
 
       /*
        * 函数说明：
@@ -95,7 +100,7 @@ namespace gr {
       void stop_saving();
 
      public:
-      data_store_impl(int data_len, const std::string& path);
+      data_store_impl(int data_len, int skip_len, const std::string& path);
       ~data_store_impl();
 
       /*

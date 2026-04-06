@@ -11,7 +11,7 @@ options:
     gen_linking: dynamic
     generate_options: qt_gui
     hier_block_src_path: '.:'
-    id: wyy_test
+    id: hop
     max_nouts: '0'
     output_language: python
     placement: (0,0)
@@ -1933,8 +1933,9 @@ blocks:
     affinity: ''
     alias: ''
     comment: ''
-    data_len: '10000000'
+    data_len: '200'
     path: /home/mess1ah/zz_ble_cs_gnuradio/cs_gnuradio/data_store_2
+    skip_len: '30000'
   states:
     bus_sink: false
     bus_source: false
@@ -1948,8 +1949,9 @@ blocks:
     affinity: ''
     alias: ''
     comment: ''
-    data_len: '10000000'
+    data_len: '200'
     path: /home/mess1ah/zz_ble_cs_gnuradio/cs_gnuradio/data_store_1
+    skip_len: '30000'
   states:
     bus_sink: false
     bus_source: false
@@ -1965,6 +1967,7 @@ blocks:
     comment: ''
     maxoutbuf: '0'
     minoutbuf: '0'
+    repeat_total: '1'
     sample_rate: '100000000'
     start_btn: start_button
     stop_btn: stop_button

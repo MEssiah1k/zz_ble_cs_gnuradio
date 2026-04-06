@@ -30,17 +30,17 @@ namespace gr {
 
     // 工厂函数：创建 interact_center_impl 实例。
     interact_center::sptr
-    interact_center::make(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms)
+    interact_center::make(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms, int repeat_total)
     {
       return gnuradio::make_block_sptr<interact_center_impl>(
-        sample_rate, start_btn, stop_btn, wait_time_ms); // 交由具体实现类保存配置并初始化状态机
+        sample_rate, start_btn, stop_btn, wait_time_ms, repeat_total); // 交由具体实现类保存配置并初始化状态机
     }
 
     // 构造函数：
     // 1. 声明为单输入、零输出的 sync_block
     // 2. 注册多个消息输出端口，分别控制发送块、存储块和频率块  
     // 3. 根据采样率和等待时间换算状态机阶段时长
-    interact_center_impl::interact_center_impl(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms)
+    interact_center_impl::interact_center_impl(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms, int repeat_total)
       : gr::sync_block("interact_center",
               gr::io_signature::make(1 /* min inputs */, 1 /* max inputs */, sizeof(input_type)), // 单输入口，用输入样本数作为“时间推进器”
               gr::io_signature::make(0 /* min outputs */, 0 /*max outputs */, 0)),                // 无输出口，因为这里只做消息调度
@@ -48,6 +48,8 @@ namespace gr {
         _start_btn(start_btn),      // 保存开始按钮初值
         _stop_btn(stop_btn),        // 保存停止按钮初值
         _wait_time_ms(wait_time_ms),// 保存阶段等待时长
+        _repeat_total(std::max(1, repeat_total)), // 至少重复 1 次，避免非法参数破坏状态机
+        _repeat_index(0),           // 每次启动都从当前频点的第一次重复开始
         _is_running(false),         // 初始状态机处于停止态
         _wait_counter(0),           // 当前阶段累计等待计数清零
         _state(0)                   // 初始状态设为空闲态
@@ -78,6 +80,7 @@ namespace gr {
             if (!_is_running) {
                 _is_running = true;          // 状态机正式进入运行态
                 _current_freq = -40000000.0; // 每次重新启动都从起始频点开始
+                _repeat_index = 0;           // 每次重新启动都从当前频点的第 0 次重复开始
                 send_freq_command();         // 先通知外部更新频率
                 _state = 1;                  // 从第一阶段开始
                 send_phase1_start();         // 启动第一组发送/存储
@@ -114,7 +117,7 @@ namespace gr {
         message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_stop"));   // 先停第二组发送
         message_port_pub(pmt::mp("store2_ctrl"), pmt::intern("store_stop")); // 再停第二组存储
         message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_start"));  // 启动第一组发送
-        message_port_pub(pmt::mp("store1_ctrl"), pmt::intern("store_start")); // 启动第一组存储
+        message_port_pub(pmt::mp("store1_ctrl"), make_store_start_msg()); // 启动第一组存储，并带上频点/重复编号
     }
     
     void interact_center_impl::send_phase2_start()
@@ -125,7 +128,7 @@ namespace gr {
         message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_stop"));   // 关闭第一组发送
         
         message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_start"));   // 启动第二组发送
-        message_port_pub(pmt::mp("store2_ctrl"), pmt::intern("store_start")); // 启动第二组存储
+        message_port_pub(pmt::mp("store2_ctrl"), make_store_start_msg()); // 启动第二组存储，并带上频点/重复编号
     }
     
     void interact_center_impl::send_all_stop()
@@ -145,6 +148,20 @@ namespace gr {
         pmt::pmt_t key = pmt::intern("freq");               // 键名固定为 "freq"
         pmt::pmt_t val = pmt::from_double(_current_freq);   // 频率值转成 PMT double
         message_port_pub(pmt::mp("freq_ctrl"), pmt::cons(key, val)); // 以 pair 形式发给频率控制口
+    }
+
+    pmt::pmt_t interact_center_impl::make_store_start_msg() const
+    {
+        pmt::pmt_t msg = pmt::make_dict();
+        msg = pmt::dict_add(msg, pmt::intern("cmd"), pmt::intern("store_start"));
+        msg = pmt::dict_add(msg, pmt::intern("freq_index"), pmt::from_long(current_freq_index()));
+        msg = pmt::dict_add(msg, pmt::intern("repeat_index"), pmt::from_long(_repeat_index));
+        return msg;
+    }
+
+    int interact_center_impl::current_freq_index() const
+    {
+        return static_cast<int>((_current_freq + 40000000.0) / 1000000.0 + 0.5);
     }
 
     int
@@ -181,18 +198,26 @@ namespace gr {
                          items_processed += needed;                        // 消耗这部分样本
                          _wait_counter = 0;                                // 为下一阶段清零等待计数
                          
-                         // 第二阶段结束后步进频率，形成从 -40 MHz 到 +40 MHz 的扫频。
-                         _current_freq += 1000000.0; // 频率每轮增加 1 MHz
-                         if (_current_freq > 40000000.0) {
-                              // 扫频结束，停止整个状态机。
-                              _is_running = false; // 标记状态机停止
-                              _state = 0;          // 复位到空闲态
-                              send_all_stop();     // 通知所有子模块收尾
+                         // 第二阶段结束后，优先判断当前频点是否还需要继续重复。
+                         if (_repeat_index + 1 < _repeat_total) {
+                              _repeat_index += 1;  // 同一频点进入下一次重复
+                              _state = 1;          // 回到第一阶段，重新跑一遍同频点流程
+                              send_phase1_start();
                          } else {
-                              // 继续下一个频点，重新回到第一阶段。
-                              send_freq_command(); // 先下发新的频率
-                              _state = 1;         // 切回第一阶段
-                              send_phase1_start(); // 启动第一阶段通路
+                              // 当前频点所有重复都结束后，才步进到下一个频点。
+                              _repeat_index = 0;
+                              _current_freq += 1000000.0; // 频率每轮增加 1 MHz
+                              if (_current_freq > 40000000.0) {
+                                   // 扫频结束，停止整个状态机。
+                                   _is_running = false; // 标记状态机停止
+                                   _state = 0;          // 复位到空闲态
+                                   send_all_stop();     // 通知所有子模块收尾
+                              } else {
+                                   // 继续下一个频点，重新回到第一阶段。
+                                   send_freq_command(); // 先下发新的频率
+                                   _state = 1;          // 切回第一阶段
+                                   send_phase1_start(); // 启动第一阶段通路
+                              }
                          }
                      } else {
                          _wait_counter += items_remaining; // 第二阶段继续积累等待样本

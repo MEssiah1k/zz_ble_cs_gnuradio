@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,8 @@ PAIR_MAPPINGS = {
         "data_initiator_ref_local",
     ),
 }
+NEW_STYLE_RE = re.compile(r"^data_f(?P<freq>\d+)_r(?P<repeat>\d+)$")
+OLD_STYLE_RE = re.compile(r"^data_(?P<index>\d+)$")
 
 
 def discover_data_dirs(root: Path) -> list[Path]:
@@ -42,7 +45,45 @@ def resolve_root(root: Path) -> Path:
 
 
 def list_bin_files(dir_path: Path) -> list[Path]:
-    return sorted(dir_path.glob("data_*.bin"), key=lambda p: int(p.stem.split("_")[-1]))
+    return sorted(dir_path.glob("data_*.bin"), key=file_sort_key)
+
+
+def parse_file_tokens(path: Path) -> dict[str, int | None]:
+    stem = path.stem
+    new_match = NEW_STYLE_RE.match(stem)
+    if new_match:
+        return {
+            "freq_index": int(new_match.group("freq")),
+            "repeat_index": int(new_match.group("repeat")),
+            "legacy_index": None,
+        }
+
+    old_match = OLD_STYLE_RE.match(stem)
+    if old_match:
+        return {
+            "freq_index": None,
+            "repeat_index": None,
+            "legacy_index": int(old_match.group("index")),
+        }
+
+    return {
+        "freq_index": None,
+        "repeat_index": None,
+        "legacy_index": None,
+    }
+
+
+def file_sort_key(path: Path) -> tuple[int, int, int, str]:
+    tokens = parse_file_tokens(path)
+    freq_index = tokens["freq_index"]
+    repeat_index = tokens["repeat_index"]
+    legacy_index = tokens["legacy_index"]
+
+    if freq_index is not None and repeat_index is not None:
+        return (0, int(freq_index), int(repeat_index), path.name)
+    if legacy_index is not None:
+        return (1, int(legacy_index), 0, path.name)
+    return (2, 0, 0, path.name)
 
 
 def validate_bin_layout(path: Path) -> dict[str, Any]:
@@ -141,11 +182,15 @@ def scan_directory(dir_path: Path) -> list[dict[str, Any]]:
         return records
 
     for file_path in list_bin_files(dir_path):
+        tokens = parse_file_tokens(file_path)
         layout = validate_bin_layout(file_path)
         flat = {
             "path": str(file_path),
             "directory": dir_path.name,
             "file": file_path.name,
+            "freq_index": tokens["freq_index"],
+            "repeat_index": tokens["repeat_index"],
+            "legacy_index": tokens["legacy_index"],
             "ok": layout["ok"],
             "file_size_bytes": layout["file_size_bytes"],
             "samples": layout["samples"],
@@ -173,7 +218,7 @@ def check_pair(rx_dir: Path, ref_dir: Path) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     rx_files = {p.name: p for p in list_bin_files(rx_dir)}
     ref_files = {p.name: p for p in list_bin_files(ref_dir)}
-    all_names = sorted(set(rx_files) | set(ref_files), key=lambda name: int(Path(name).stem.split("_")[-1]))
+    all_names = sorted(set(rx_files) | set(ref_files), key=lambda name: file_sort_key(Path(name)))
 
     for name in all_names:
         rx_path = rx_files.get(name)
@@ -206,6 +251,8 @@ def print_directory_report(records: list[dict[str, Any]]) -> None:
     for row in records:
         brief = {
             "file": row["file"],
+            "freq_index": row.get("freq_index"),
+            "repeat_index": row.get("repeat_index"),
             "ok": row["ok"],
             "samples": row["samples"],
             "classification": row.get("classification", ""),

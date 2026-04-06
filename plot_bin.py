@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 import matplotlib
@@ -24,6 +25,8 @@ PAIR_MAPPINGS = {
         "data_initiator_ref_local",
     ),
 }
+NEW_STYLE_RE = re.compile(r"^data_f(?P<freq>\d+)_r(?P<repeat>\d+)$")
+OLD_STYLE_RE = re.compile(r"^data_(?P<index>\d+)$")
 
 
 def discover_data_dirs(root: Path) -> list[Path]:
@@ -38,7 +41,60 @@ def resolve_root(root: Path) -> Path:
 
 
 def list_bin_files(dir_path: Path) -> list[Path]:
-    return sorted(dir_path.glob("data_*.bin"), key=lambda p: int(p.stem.split("_")[-1]))
+    return sorted(dir_path.glob("data_*.bin"), key=file_sort_key)
+
+
+def filter_bin_files(files: list[Path], first_repeat_only: bool) -> list[Path]:
+    """默认只画每个频点的第一次测量，减少重复出图耗时。"""
+    if not first_repeat_only:
+        return files
+
+    filtered: list[Path] = []
+    for file_path in files:
+        tokens = parse_file_tokens(file_path)
+        repeat_index = tokens["repeat_index"]
+        # 旧命名没有重复编号，保持兼容，仍然画出来。
+        if repeat_index is None or int(repeat_index) == 0:
+            filtered.append(file_path)
+    return filtered
+
+
+def parse_file_tokens(path: Path) -> dict[str, int | None]:
+    stem = path.stem
+    new_match = NEW_STYLE_RE.match(stem)
+    if new_match:
+        return {
+            "freq_index": int(new_match.group("freq")),
+            "repeat_index": int(new_match.group("repeat")),
+            "legacy_index": None,
+        }
+
+    old_match = OLD_STYLE_RE.match(stem)
+    if old_match:
+        return {
+            "freq_index": None,
+            "repeat_index": None,
+            "legacy_index": int(old_match.group("index")),
+        }
+
+    return {
+        "freq_index": None,
+        "repeat_index": None,
+        "legacy_index": None,
+    }
+
+
+def file_sort_key(path: Path) -> tuple[int, int, int, str]:
+    tokens = parse_file_tokens(path)
+    freq_index = tokens["freq_index"]
+    repeat_index = tokens["repeat_index"]
+    legacy_index = tokens["legacy_index"]
+
+    if freq_index is not None and repeat_index is not None:
+        return (0, int(freq_index), int(repeat_index), path.name)
+    if legacy_index is not None:
+        return (1, int(legacy_index), 0, path.name)
+    return (2, 0, 0, path.name)
 
 
 def load_gr_complex_bin(path: Path) -> np.ndarray:
@@ -122,7 +178,16 @@ def plot_constellation(x: np.ndarray, save_path: Path, max_points: int) -> None:
 
 def plot_file(file_path: Path, output_base: Path, max_points: int) -> None:
     x = load_gr_complex_bin(file_path)
-    target_dir = output_base / file_path.parent.name / file_path.stem
+    tokens = parse_file_tokens(file_path)
+    if tokens["freq_index"] is not None and tokens["repeat_index"] is not None:
+        target_dir = (
+            output_base
+            / file_path.parent.name
+            / f"freq_{int(tokens['freq_index']):02d}"
+            / f"rep_{int(tokens['repeat_index']):02d}"
+        )
+    else:
+        target_dir = output_base / file_path.parent.name / file_path.stem
     target_dir.mkdir(parents=True, exist_ok=True)
     plot_time_iq(x, target_dir / f"{file_path.stem}_iq.png", max_points)
     plot_amplitude_phase(x, target_dir / file_path.stem, max_points)
@@ -149,6 +214,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default=4000,
         help="每张图最多绘制多少个样本点",
     )
+    parser.add_argument(
+        "--all-repeats",
+        action="store_true",
+        help="画出所有重复测量；默认只画每个频点的第一次测量 r00",
+    )
     return parser
 
 
@@ -166,7 +236,11 @@ def main() -> None:
     print(f"== root: {args.root} ==")
     for dir_path in data_dirs:
         print(f"== plot directory: {dir_path} ==")
-        for file_path in list_bin_files(dir_path):
+        files = filter_bin_files(
+            list_bin_files(dir_path),
+            first_repeat_only=not args.all_repeats,
+        )
+        for file_path in files:
             plot_file(file_path, args.output_dir / args.root.name, args.max_points)
             print(file_path.name)
 

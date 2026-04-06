@@ -14,7 +14,7 @@
 /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
 /* BINDTOOL_USE_PYGCCXML(0)                                                        */
 /* BINDTOOL_HEADER_FILE(data_store.h)                                        */
-/* BINDTOOL_HEADER_FILE_HASH(f749f6b2d5ca92db8ce3fa0da78cb0f7)                     */
+/* BINDTOOL_HEADER_FILE_HASH(e3283889ef90560c41e83c84cf877cda)                     */
 /***********************************************************************************/
 
 #include <pybind11/complex.h>
@@ -39,6 +39,7 @@ void bind_data_store(py::module& m)
 
         .def(py::init(&data_store::make),
            py::arg("data_len"),
+           py::arg("skip_len"),
            py::arg("path"),
            D(data_store,make)
         )
@@ -52,8 +53,6 @@ void bind_data_store(py::module& m)
 
 
 }
-
-
 
 
 

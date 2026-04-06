@@ -1,3 +1,6 @@
 hop/gr-usrp_ble/build
 .vscode/
 __pycache__
+output_plot_bin
+*/data_initiator_rx_from_reflector/
+*/data_reflector_rx_from_initiator/

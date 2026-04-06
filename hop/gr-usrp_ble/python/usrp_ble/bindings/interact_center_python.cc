@@ -14,7 +14,7 @@
 /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
 /* BINDTOOL_USE_PYGCCXML(0)                                                        */
 /* BINDTOOL_HEADER_FILE(interact_center.h)                                        */
-/* BINDTOOL_HEADER_FILE_HASH(e2af5dcd797f371b9d380f85788441a1)                     */
+/* BINDTOOL_HEADER_FILE_HASH(26dd5c3f7ed1f3ecc039b0b60a11c1f8)                     */
 /***********************************************************************************/
 
 #include <pybind11/complex.h>
@@ -42,6 +42,7 @@ void bind_interact_center(py::module& m)
            py::arg("start_btn"),
            py::arg("stop_btn"),
            py::arg("wait_time_ms"),
+           py::arg("repeat_total"),
            D(interact_center,make)
         )
         .def("set_start_btn", &interact_center::set_start_btn,
@@ -66,8 +67,6 @@ void bind_interact_center(py::module& m)
 
 
 }
-
-
 
 
 

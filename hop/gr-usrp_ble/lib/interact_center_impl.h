@@ -10,6 +10,7 @@
 
 #include <gnuradio/usrp_ble/interact_center.h>
 #include <chrono>
+#include <pmt/pmt.h>
 
 /*
  * 文件说明：
@@ -50,6 +51,8 @@ namespace gr {
       bool _start_btn;               // 开始按钮当前状态，用于检测上升沿启动
       bool _stop_btn;                // 停止按钮当前状态，用于检测上升沿停止
       float _wait_time_ms;           // 每个阶段的目标等待时间，单位毫秒
+      int _repeat_total;             // 每个频点需要重复采集的总次数
+      int _repeat_index;             // 当前频点已经进行到第几次重复（从 0 开始）
       bool _is_running;              // 整个实验流程是否正在运行
       size_t _samples_to_wait;       // 当前每个阶段应等待的总采样点数量
       size_t _wait_counter;          // 当前阶段已经累计等待的采样点数量
@@ -94,9 +97,11 @@ namespace gr {
        * 把 _current_freq 打包成消息并发给频率控制端口。
        */
       void send_freq_command();
+      pmt::pmt_t make_store_start_msg() const;
+      int current_freq_index() const;
 
      public:
-      interact_center_impl(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms);
+      interact_center_impl(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms, int repeat_total);
       ~interact_center_impl();
       
       void set_start_btn(bool start_btn) override;

@@ -4,7 +4,7 @@ category: '[usrp_ble]'
 
 templates:
   imports: from gnuradio import usrp_ble
-  make: usrp_ble.interact_center(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms})
+  make: usrp_ble.interact_center(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${repeat_total})
   callbacks:
   - set_start_btn(${start_btn})
   - set_stop_btn(${stop_btn})
@@ -33,6 +33,10 @@ parameters:
   label: Wait Time (ms)
   dtype: float
   default: 100.0
+- id: repeat_total
+  label: Repeat Total
+  dtype: int
+  default: 1
 
 inputs:
 - label: in

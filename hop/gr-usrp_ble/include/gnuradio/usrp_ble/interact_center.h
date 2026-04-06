@@ -32,7 +32,7 @@ namespace gr {
        * class. usrp_ble::interact_center::make is the public interface for
        * creating new instances.
        */
-      static sptr make(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms);
+      static sptr make(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms, int repeat_total);
       
       virtual void set_start_btn(bool start_btn) = 0;
       virtual void set_stop_btn(bool stop_btn) = 0;
