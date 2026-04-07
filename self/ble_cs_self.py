@@ -92,6 +92,8 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         self.usrp_ble_data_store_0_0_0 = usrp_ble.data_store(200, 50000, '/home/mess1ah/zz_ble_cs_gnuradio/self/data_initiator_rx_from_reflector')
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_data_send_0 = usrp_ble.data_send(samp_rate, 0.001)
+        self.usrp_ble_channel_phase_1 = usrp_ble.channel_phase(centetr_fre, distance_m, 1.0)
+        self.usrp_ble_channel_phase_0 = usrp_ble.channel_phase(centetr_fre, distance_m, 1.0)
         self._send_gain_range = qtgui.Range(0, 20, 1, 0, 200)
         self._send_gain_win = qtgui.RangeWidget(self._send_gain_range, self.set_send_gain, "'send_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._send_gain_win)
@@ -286,8 +288,6 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         self.top_layout.addWidget(self._qtgui_freq_sink_x_0_win)
         self.blocks_multiply_xx_0_0 = blocks.multiply_vcc(1)
         self.blocks_multiply_xx_0 = blocks.multiply_vcc(1)
-        self.blocks_multiply_const_vxx_1 = blocks.multiply_const_cc(0.8660254 + 0.5j)
-        self.blocks_multiply_const_vxx_0 = blocks.multiply_const_cc(0.8660254 + 0.5j)
         self.blocks_multiply_conjugate_cc_0_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_multiply_conjugate_cc_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_message_debug_0 = blocks.message_debug(True, gr.log_levels.info)
@@ -299,6 +299,8 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         ##################################################
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.analog_sig_source_x_0_1, 'cmd'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.blocks_message_debug_0, 'print'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_channel_phase_0, 'freq'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_channel_phase_1, 'freq'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send1_ctrl'), (self.usrp_ble_data_send_0, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send2_ctrl'), (self.usrp_ble_data_send_0_0, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'store2_ctrl'), (self.usrp_ble_data_store_0_0_0, 'command'))
@@ -311,12 +313,12 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.qtgui_time_sink_x_0_0, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_data_store_0_1, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_data_store_0_0_0, 0))
-        self.connect((self.blocks_multiply_const_vxx_0, 0), (self.blocks_multiply_conjugate_cc_0, 0))
-        self.connect((self.blocks_multiply_const_vxx_1, 0), (self.blocks_multiply_conjugate_cc_0_0, 0))
-        self.connect((self.blocks_multiply_xx_0, 0), (self.blocks_multiply_const_vxx_0, 0))
         self.connect((self.blocks_multiply_xx_0, 0), (self.qtgui_freq_sink_x_0, 0))
         self.connect((self.blocks_multiply_xx_0, 0), (self.qtgui_time_sink_x_0, 0))
-        self.connect((self.blocks_multiply_xx_0_0, 0), (self.blocks_multiply_const_vxx_1, 0))
+        self.connect((self.blocks_multiply_xx_0, 0), (self.usrp_ble_channel_phase_0, 0))
+        self.connect((self.blocks_multiply_xx_0_0, 0), (self.usrp_ble_channel_phase_1, 0))
+        self.connect((self.usrp_ble_channel_phase_0, 0), (self.blocks_multiply_conjugate_cc_0, 0))
+        self.connect((self.usrp_ble_channel_phase_1, 0), (self.blocks_multiply_conjugate_cc_0_0, 0))
         self.connect((self.usrp_ble_data_send_0, 0), (self.blocks_multiply_xx_0, 1))
         self.connect((self.usrp_ble_data_send_0, 0), (self.usrp_ble_interact_center_0, 0))
         self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_multiply_xx_0_0, 1))
@@ -374,12 +376,16 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
 
     def set_distance_m(self, distance_m):
         self.distance_m = distance_m
+        self.usrp_ble_channel_phase_0.set_distance_m(self.distance_m)
+        self.usrp_ble_channel_phase_1.set_distance_m(self.distance_m)
 
     def get_centetr_fre(self):
         return self.centetr_fre
 
     def set_centetr_fre(self, centetr_fre):
         self.centetr_fre = centetr_fre
+        self.usrp_ble_channel_phase_0.set_center_freq_hz(self.centetr_fre)
+        self.usrp_ble_channel_phase_1.set_center_freq_hz(self.centetr_fre)
 
 
 

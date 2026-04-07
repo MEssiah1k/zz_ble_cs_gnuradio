@@ -10,5 +10,6 @@ install(FILES
     usrp_ble_tx_rx_triggle.block.yml
     usrp_ble_data_send.block.yml
     usrp_ble_data_store.block.yml
-    usrp_ble_interact_center.block.yml DESTINATION share/gnuradio/grc/blocks
+    usrp_ble_interact_center.block.yml
+    usrp_ble_channel_phase.block.yml DESTINATION share/gnuradio/grc/blocks
 )

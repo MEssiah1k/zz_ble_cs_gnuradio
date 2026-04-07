@@ -14,5 +14,6 @@ install(FILES
     tx_rx_triggle.h
     data_send.h
     data_store.h
-    interact_center.h DESTINATION include/gnuradio/usrp_ble
+    interact_center.h
+    channel_phase.h DESTINATION include/gnuradio/usrp_ble
 )

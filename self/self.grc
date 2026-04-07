@@ -215,42 +215,6 @@ blocks:
     coordinate: [968, 680.0]
     rotation: 0
     state: enabled
-- name: blocks_multiply_const_vxx_0
-  id: blocks_multiply_const_vxx
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    const: 0.8660254 + 0.5j
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    type: complex
-    vlen: '1'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [696, 568.0]
-    rotation: 0
-    state: enabled
-- name: blocks_multiply_const_vxx_1
-  id: blocks_multiply_const_vxx
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    const: 0.8660254 + 0.5j
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    type: complex
-    vlen: '1'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [712, 672.0]
-    rotation: 0
-    state: enabled
 - name: blocks_multiply_xx_0
   id: blocks_multiply_xx
   parameters:
@@ -643,6 +607,42 @@ blocks:
     coordinate: [1264, 428.0]
     rotation: 0
     state: true
+- name: usrp_ble_channel_phase_0
+  id: usrp_ble_channel_phase
+  parameters:
+    affinity: ''
+    alias: ''
+    amplitude: '1.0'
+    center_freq_hz: centetr_fre
+    comment: ''
+    distance_m: distance_m
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [696, 568.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_channel_phase_1
+  id: usrp_ble_channel_phase
+  parameters:
+    affinity: ''
+    alias: ''
+    amplitude: '1.0'
+    center_freq_hz: centetr_fre
+    comment: ''
+    distance_m: distance_m
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [712, 672.0]
+    rotation: 0
+    state: enabled
 - name: usrp_ble_data_send_0
   id: usrp_ble_data_send
   parameters:
@@ -726,7 +726,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [328, 760.0]
+    coordinate: [240, 784.0]
     rotation: 0
     state: true
 
@@ -739,17 +739,19 @@ connections:
 - [blocks_multiply_conjugate_cc_0, '0', qtgui_time_sink_x_0_0, '0']
 - [blocks_multiply_conjugate_cc_0, '0', usrp_ble_data_store_0_1, '0']
 - [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_data_store_0_0_0, '0']
-- [blocks_multiply_const_vxx_0, '0', blocks_multiply_conjugate_cc_0, '0']
-- [blocks_multiply_const_vxx_1, '0', blocks_multiply_conjugate_cc_0_0, '0']
-- [blocks_multiply_xx_0, '0', blocks_multiply_const_vxx_0, '0']
 - [blocks_multiply_xx_0, '0', qtgui_freq_sink_x_0, '0']
 - [blocks_multiply_xx_0, '0', qtgui_time_sink_x_0, '0']
-- [blocks_multiply_xx_0_0, '0', blocks_multiply_const_vxx_1, '0']
+- [blocks_multiply_xx_0, '0', usrp_ble_channel_phase_0, '0']
+- [blocks_multiply_xx_0_0, '0', usrp_ble_channel_phase_1, '0']
+- [usrp_ble_channel_phase_0, '0', blocks_multiply_conjugate_cc_0, '0']
+- [usrp_ble_channel_phase_1, '0', blocks_multiply_conjugate_cc_0_0, '0']
 - [usrp_ble_data_send_0, '0', blocks_multiply_xx_0, '1']
 - [usrp_ble_data_send_0, '0', usrp_ble_interact_center_0, '0']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_0, '1']
 - [usrp_ble_interact_center_0, freq_ctrl, analog_sig_source_x_0_1, cmd]
 - [usrp_ble_interact_center_0, freq_ctrl, blocks_message_debug_0, print]
+- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_channel_phase_0, freq]
+- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_channel_phase_1, freq]
 - [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_data_send_0, command]
 - [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_data_send_0_0, command]
 - [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_0_1, command]

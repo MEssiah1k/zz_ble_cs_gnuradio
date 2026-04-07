@@ -176,7 +176,60 @@ def summarize_complex_signal(x: np.ndarray) -> dict[str, Any]:
     return summary
 
 
-def scan_directory(dir_path: Path) -> list[dict[str, Any]]:
+def robust_iq_mean(x: np.ndarray, outlier_mad_scale: float) -> dict[str, Any]:
+    """剔除明显离群 IQ 点后，计算剩余点的平均复数。
+
+    这里用复平面里的中位数点作为中心，再按到中心的距离做 MAD 阈值。
+    目的不是做复杂聚类，而是把偶发跳点/异常点从 200 点均值里排除掉。
+    """
+    result: dict[str, Any] = {
+        "robust_samples": 0,
+        "outlier_samples": 0,
+        "robust_mean_i": 0.0,
+        "robust_mean_q": 0.0,
+        "robust_mean_abs": 0.0,
+        "robust_mean_phase": 0.0,
+        "robust_radius_threshold": 0.0,
+    }
+    if x.size == 0:
+        return result
+
+    finite_mask = np.isfinite(x.real) & np.isfinite(x.imag)
+    finite = x[finite_mask]
+    if finite.size == 0:
+        result["outlier_samples"] = int(x.size)
+        return result
+
+    center = np.median(finite.real) + 1j * np.median(finite.imag)
+    radius = np.abs(finite - center)
+    median_radius = float(np.median(radius))
+    mad_radius = float(np.median(np.abs(radius - median_radius)))
+
+    if mad_radius <= 1e-12:
+        threshold = median_radius + 1e-9
+    else:
+        threshold = median_radius + outlier_mad_scale * mad_radius
+
+    valid_finite = finite[radius <= threshold]
+    if valid_finite.size == 0:
+        valid_finite = finite
+
+    z = np.mean(valid_finite)
+    result.update(
+        {
+            "robust_samples": int(valid_finite.size),
+            "outlier_samples": int(x.size - valid_finite.size),
+            "robust_mean_i": float(np.real(z)),
+            "robust_mean_q": float(np.imag(z)),
+            "robust_mean_abs": float(np.abs(z)),
+            "robust_mean_phase": float(np.angle(z)),
+            "robust_radius_threshold": float(threshold),
+        }
+    )
+    return result
+
+
+def scan_directory(dir_path: Path, outlier_mad_scale: float) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     if not dir_path.exists():
         return records
@@ -198,6 +251,7 @@ def scan_directory(dir_path: Path) -> list[dict[str, Any]]:
         if layout["ok"]:
             x = load_gr_complex_bin(file_path)
             summary = summarize_complex_signal(x)
+            robust_summary = robust_iq_mean(x, outlier_mad_scale)
             flat.update(
                 {
                     "mean_abs": summary["mean_abs"],
@@ -206,6 +260,7 @@ def scan_directory(dir_path: Path) -> list[dict[str, Any]]:
                     "mean_phase": summary["mean_phase"],
                     "phase_std": summary["phase_std"],
                     "classification": summary["classification"],
+                    **robust_summary,
                 }
             )
         else:
@@ -257,6 +312,10 @@ def print_directory_report(records: list[dict[str, Any]]) -> None:
             "samples": row["samples"],
             "classification": row.get("classification", ""),
             "mean_abs": row.get("mean_abs", 0.0),
+            "outlier_samples": row.get("outlier_samples", 0),
+            "robust_mean_i": row.get("robust_mean_i", 0.0),
+            "robust_mean_q": row.get("robust_mean_q", 0.0),
+            "robust_mean_phase": row.get("robust_mean_phase", 0.0),
         }
         print(json.dumps(brief, ensure_ascii=False))
 
@@ -286,6 +345,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default=PROJECT_ROOT / "output_check_bin",
         help="json 摘要输出目录",
     )
+    parser.add_argument(
+        "--outlier-mad-scale",
+        type=float,
+        default=8.0,
+        help="IQ 离群点半径阈值系数，阈值 = median(radius) + scale * MAD(radius)",
+    )
     return parser
 
 
@@ -306,7 +371,7 @@ def main() -> None:
 
     data_dirs = discover_data_dirs(args.root)
     for dir_path in data_dirs:
-        all_reports["directories"][dir_path.name] = scan_directory(dir_path)
+        all_reports["directories"][dir_path.name] = scan_directory(dir_path, args.outlier_mad_scale)
 
     for _, (rx_name, ref_name) in PAIR_MAPPINGS.items():
         rx_dir = args.root / rx_name
