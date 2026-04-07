@@ -17,6 +17,7 @@ list(APPEND usrp_ble_sources
     data_store_impl.cc
     interact_center_impl.cc
     channel_phase_impl.cc
+    random_phase_impl.cc
 )
 
 set(usrp_ble_sources "${usrp_ble_sources}" PARENT_SCOPE)

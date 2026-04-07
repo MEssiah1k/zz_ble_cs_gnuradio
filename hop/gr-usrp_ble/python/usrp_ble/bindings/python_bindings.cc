@@ -26,6 +26,7 @@ namespace py = pybind11;
     void bind_data_store(py::module& m);
     void bind_interact_center(py::module& m);
     void bind_channel_phase(py::module& m);
+    void bind_random_phase(py::module& m);
 // ) END BINDING_FUNCTION_PROTOTYPES
 
 
@@ -59,5 +60,6 @@ PYBIND11_MODULE(usrp_ble_python, m)
     bind_data_store(m);
     bind_interact_center(m);
     bind_channel_phase(m);
+    bind_random_phase(m);
     // ) END BINDING_FUNCTION_CALLS
 }

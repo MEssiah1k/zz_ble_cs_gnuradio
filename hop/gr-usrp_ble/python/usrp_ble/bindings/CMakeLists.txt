@@ -33,7 +33,8 @@ list(APPEND usrp_ble_python_files
     data_send_python.cc
     data_store_python.cc
     interact_center_python.cc
-    channel_phase_python.cc python_bindings.cc)
+    channel_phase_python.cc
+    random_phase_python.cc python_bindings.cc)
 
 GR_PYBIND_MAKE_OOT(usrp_ble
    ../../..

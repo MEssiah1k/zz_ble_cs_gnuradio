@@ -31,7 +31,7 @@ import sip
 
 
 
-class ble_cs_1to1(gr.top_block, Qt.QWidget):
+class hop(gr.top_block, Qt.QWidget):
 
     def __init__(self):
         gr.top_block.__init__(self, "Not titled yet", catch_exceptions=True)
@@ -54,7 +54,7 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.top_grid_layout = Qt.QGridLayout()
         self.top_layout.addLayout(self.top_grid_layout)
 
-        self.settings = Qt.QSettings("GNU Radio", "ble_cs_1to1")
+        self.settings = Qt.QSettings("GNU Radio", "hop")
 
         try:
             geometry = self.settings.value("geometry")
@@ -69,7 +69,7 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.stop_button = stop_button = 0
         self.start_button = start_button = 0
         self.send_gain = send_gain = 0
-        self.samp_rate = samp_rate = 100e6
+        self.samp_rate = samp_rate = 1e6
         self.recv_gain = recv_gain = 0
         self.centetr_fre = centetr_fre = 2.44e9
 
@@ -95,11 +95,9 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self._recv_gain_range = qtgui.Range(0, 20, 1, 0, 200)
         self._recv_gain_win = qtgui.RangeWidget(self._recv_gain_range, self.set_recv_gain, "'recv_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._recv_gain_win)
-        self.usrp_ble_random_phase_1 = usrp_ble.random_phase(2, 1.0)
-        self.usrp_ble_random_phase_0 = usrp_ble.random_phase(1, 1.0)
-        self.usrp_ble_interact_center_0 = usrp_ble.interact_center(100000000, start_button, stop_button, 10, 3)
-        self.usrp_ble_data_store_0_0 = usrp_ble.data_store(200, 50000, '/home/mess1ah/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector')
-        self.usrp_ble_data_store_0 = usrp_ble.data_store(200, 50000, '/home/mess1ah/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator')
+        self.usrp_ble_interact_center_0 = usrp_ble.interact_center(100000000, start_button, stop_button, 1000.0, 1)
+        self.usrp_ble_data_store_0_0 = usrp_ble.data_store(200, 30000, '/home/mess1ah/zz_ble_cs_gnuradio/cs_gnuradio/data_store_1')
+        self.usrp_ble_data_store_0 = usrp_ble.data_store(200, 30000, '/home/mess1ah/zz_ble_cs_gnuradio/cs_gnuradio/data_store_2')
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_data_send_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.uhd_usrp_source_0_0 = uhd.usrp_source(
@@ -236,12 +234,14 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
 
         self._qtgui_freq_sink_x_0_win = sip.wrapinstance(self.qtgui_freq_sink_x_0.qwidget(), Qt.QWidget)
         self.top_layout.addWidget(self._qtgui_freq_sink_x_0_win)
+        self.blocks_multiply_xx_0_1 = blocks.multiply_vcc(1)
         self.blocks_multiply_xx_0_0 = blocks.multiply_vcc(1)
         self.blocks_multiply_xx_0 = blocks.multiply_vcc(1)
-        self.blocks_multiply_conjugate_cc_0_0 = blocks.multiply_conjugate_cc(1)
-        self.blocks_multiply_conjugate_cc_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_message_debug_0 = blocks.message_debug(True, gr.log_levels.info)
+        self.blocks_add_xx_0 = blocks.add_vcc(1)
         self.analog_sig_source_x_0_1 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, (-49e6), 1, 0, 0)
+        self.analog_sig_source_x_0_0 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, (-500e3), 0.5, 0, 0)
+        self.analog_sig_source_x_0 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, 500e3, 0.5, 0, 0)
 
 
         ##################################################
@@ -251,31 +251,27 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.blocks_message_debug_0, 'print'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send1_ctrl'), (self.usrp_ble_data_send_0, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send2_ctrl'), (self.usrp_ble_data_send_0_0, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'store1_ctrl'), (self.usrp_ble_data_store_0, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'store2_ctrl'), (self.usrp_ble_data_store_0_0, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_random_phase_0, 'freq'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_random_phase_1, 'freq'))
-        self.connect((self.analog_sig_source_x_0_1, 0), (self.usrp_ble_random_phase_0, 0))
-        self.connect((self.analog_sig_source_x_0_1, 0), (self.usrp_ble_random_phase_1, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_data_store_0, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_data_store_0_0, 0))
-        self.connect((self.blocks_multiply_xx_0, 0), (self.uhd_usrp_sink_0_0_0_0, 0))
-        self.connect((self.blocks_multiply_xx_0_0, 0), (self.uhd_usrp_sink_0_0_0_0, 1))
-        self.connect((self.uhd_usrp_source_0_0, 1), (self.blocks_multiply_conjugate_cc_0, 0))
-        self.connect((self.uhd_usrp_source_0_0, 0), (self.blocks_multiply_conjugate_cc_0_0, 0))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'store2_ctrl'), (self.usrp_ble_data_store_0, 'command'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'store1_ctrl'), (self.usrp_ble_data_store_0_0, 'command'))
+        self.connect((self.analog_sig_source_x_0, 0), (self.blocks_add_xx_0, 0))
+        self.connect((self.analog_sig_source_x_0_0, 0), (self.blocks_add_xx_0, 1))
+        self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0_1, 0))
+        self.connect((self.blocks_add_xx_0, 0), (self.blocks_multiply_xx_0_1, 1))
+        self.connect((self.blocks_multiply_xx_0, 0), (self.uhd_usrp_sink_0_0_0_0, 1))
+        self.connect((self.blocks_multiply_xx_0_0, 0), (self.uhd_usrp_sink_0_0_0_0, 0))
+        self.connect((self.blocks_multiply_xx_0_1, 0), (self.blocks_multiply_xx_0, 0))
+        self.connect((self.blocks_multiply_xx_0_1, 0), (self.blocks_multiply_xx_0_0, 0))
         self.connect((self.uhd_usrp_source_0_0, 1), (self.qtgui_freq_sink_x_0, 0))
         self.connect((self.uhd_usrp_source_0_0, 1), (self.qtgui_time_sink_x_0, 0))
+        self.connect((self.uhd_usrp_source_0_0, 1), (self.usrp_ble_data_store_0, 0))
+        self.connect((self.uhd_usrp_source_0_0, 0), (self.usrp_ble_data_store_0_0, 0))
         self.connect((self.usrp_ble_data_send_0, 0), (self.blocks_multiply_xx_0, 1))
         self.connect((self.usrp_ble_data_send_0, 0), (self.usrp_ble_interact_center_0, 0))
         self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_multiply_xx_0_0, 1))
-        self.connect((self.usrp_ble_random_phase_0, 0), (self.blocks_multiply_conjugate_cc_0_0, 1))
-        self.connect((self.usrp_ble_random_phase_0, 0), (self.blocks_multiply_xx_0, 0))
-        self.connect((self.usrp_ble_random_phase_1, 0), (self.blocks_multiply_conjugate_cc_0, 1))
-        self.connect((self.usrp_ble_random_phase_1, 0), (self.blocks_multiply_xx_0_0, 0))
 
 
     def closeEvent(self, event):
-        self.settings = Qt.QSettings("GNU Radio", "ble_cs_1to1")
+        self.settings = Qt.QSettings("GNU Radio", "hop")
         self.settings.setValue("geometry", self.saveGeometry())
         self.stop()
         self.wait()
@@ -309,6 +305,8 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
 
     def set_samp_rate(self, samp_rate):
         self.samp_rate = samp_rate
+        self.analog_sig_source_x_0.set_sampling_freq(self.samp_rate)
+        self.analog_sig_source_x_0_0.set_sampling_freq(self.samp_rate)
         self.analog_sig_source_x_0_1.set_sampling_freq(self.samp_rate)
         self.qtgui_freq_sink_x_0.set_frequency_range(0, self.samp_rate)
         self.qtgui_time_sink_x_0.set_samp_rate(self.samp_rate)
@@ -338,7 +336,7 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
 
 
 
-def main(top_block_cls=ble_cs_1to1, options=None):
+def main(top_block_cls=hop, options=None):
 
     qapp = Qt.QApplication(sys.argv)
 
