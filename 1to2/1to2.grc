@@ -180,7 +180,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [672, 1144.0]
+    coordinate: [768, 1152.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0
@@ -196,7 +196,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1600, 728.0]
+    coordinate: [1600, 616.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0_0
@@ -212,7 +212,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1600, 856.0]
+    coordinate: [1600, 744.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0_1
@@ -228,7 +228,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1600, 984.0]
+    coordinate: [1592, 920.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0
@@ -282,7 +282,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [632, 936.0]
+    coordinate: [632, 792.0]
     rotation: 0
     state: enabled
 - name: qtgui_freq_sink_x_0
@@ -363,7 +363,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1864, 1108.0]
+    coordinate: [1856, 1044.0]
     rotation: 0
     state: true
 - name: qtgui_time_sink_x_0
@@ -460,7 +460,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1864, 1236.0]
+    coordinate: [1856, 1172.0]
     rotation: 0
     state: true
 - name: uhd_usrp_sink_0_0_0
@@ -1014,7 +1014,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [816, 704.0]
+    coordinate: [928, 704.0]
     rotation: 0
     state: enabled
 - name: uhd_usrp_source_0
@@ -1886,7 +1886,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1168, 704.0]
+    coordinate: [1224, 704.0]
     rotation: 0
     state: true
 - name: usrp_ble_data_send_0
@@ -1903,7 +1903,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [88, 680.0]
+    coordinate: [96, 680.0]
     rotation: 0
     state: true
 - name: usrp_ble_data_send_0_0
@@ -1920,7 +1920,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [88, 768.0]
+    coordinate: [96, 768.0]
     rotation: 0
     state: true
 - name: usrp_ble_data_store_0
@@ -1936,7 +1936,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1880, 724.0]
+    coordinate: [1880, 620.0]
     rotation: 0
     state: true
 - name: usrp_ble_data_store_0_0
@@ -1952,7 +1952,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1880, 852.0]
+    coordinate: [1880, 748.0]
     rotation: 0
     state: true
 - name: usrp_ble_data_store_0_1
@@ -1968,7 +1968,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1880, 980.0]
+    coordinate: [1872, 924.0]
     rotation: 0
     state: true
 - name: usrp_ble_interact_center_0
