@@ -70,7 +70,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: 1e6
+    value: 40e6
   states:
     bus_sink: false
     bus_source: false
@@ -153,7 +153,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [72, 372.0]
+    coordinate: [112, 300.0]
     rotation: 0
     state: true
 - name: analog_sig_source_x_0_0
@@ -176,7 +176,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [72, 516.0]
+    coordinate: [112, 444.0]
     rotation: 0
     state: true
 - name: analog_sig_source_x_0_1
@@ -186,7 +186,7 @@ blocks:
     alias: ''
     amp: '1'
     comment: ''
-    freq: -49e6
+    freq: -40e6
     maxoutbuf: '0'
     minoutbuf: '0'
     offset: '0'
@@ -199,7 +199,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [72, 204.0]
+    coordinate: [112, 132.0]
     rotation: 0
     state: true
 - name: blocks_add_xx_0
@@ -217,7 +217,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [304, 480.0]
+    coordinate: [344, 408.0]
     rotation: 0
     state: true
 - name: blocks_message_debug_0
@@ -232,9 +232,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [760, 1040.0]
+    coordinate: [800, 968.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: blocks_multiply_xx_0
   id: blocks_multiply_xx
   parameters:
@@ -250,7 +250,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [408, 664.0]
+    coordinate: [448, 592.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0_0
@@ -268,7 +268,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [408, 752.0]
+    coordinate: [448, 680.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0_1
@@ -286,7 +286,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [432, 424.0]
+    coordinate: [472, 352.0]
     rotation: 0
     state: enabled
 - name: qtgui_freq_sink_x_0
@@ -367,9 +367,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1456, 268.0]
+    coordinate: [1576, 284.0]
     rotation: 0
-    state: true
+    state: disabled
 - name: qtgui_time_sink_x_0
   id: qtgui_time_sink_x
   parameters:
@@ -464,9 +464,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1464, 404.0]
+    coordinate: [1576, 420.0]
     rotation: 0
-    state: true
+    state: disabled
 - name: uhd_usrp_sink_0_0_0
   id: uhd_usrp_sink
   parameters:
@@ -578,7 +578,7 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dev_addr: '"addr=192.168.10.2"'
+    dev_addr: '"addr=192.168.30.2"'
     dev_args: '"recv_frame_size=8000"'
     gain0: send_gain
     gain1: '0'
@@ -727,7 +727,7 @@ blocks:
     start_time: '-1.0'
     stream_args: ''
     stream_chans: '[]'
-    sync: sync
+    sync: none
     time_source0: ''
     time_source1: ''
     time_source2: ''
@@ -741,7 +741,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [736, 408.0]
+    coordinate: [776, 332.0]
     rotation: 0
     state: disabled
 - name: uhd_usrp_sink_0_0_0_0
@@ -781,8 +781,8 @@ blocks:
     ant7: TX/RX
     ant8: TX/RX
     ant9: TX/RX
-    bw0: 10e3
-    bw1: 10e3
+    bw0: samp_rate
+    bw1: samp_rate
     bw10: '0'
     bw11: '0'
     bw12: '0'
@@ -855,8 +855,8 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dev_addr: '"addr=192.168.10.2"'
-    dev_args: '"recv_frame_size=1472"'
+    dev_addr: '"addr=192.168.30.2"'
+    dev_args: '"send_frame_size=8000,num_send_frames=512"'
     gain0: send_gain
     gain1: send_gain
     gain10: '0'
@@ -990,7 +990,7 @@ blocks:
     minoutbuf: '0'
     nchan: '2'
     num_mboards: '1'
-    otw: ''
+    otw: sc16
     samp_rate: samp_rate
     sd_spec0: A:0 B:0
     sd_spec1: ''
@@ -1004,7 +1004,7 @@ blocks:
     start_time: '-1.0'
     stream_args: ''
     stream_chans: '[]'
-    sync: sync
+    sync: none
     time_source0: ''
     time_source1: ''
     time_source2: ''
@@ -1018,7 +1018,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [744, 676.0]
+    coordinate: [784, 604.0]
     rotation: 0
     state: enabled
 - name: uhd_usrp_source_0
@@ -1196,7 +1196,7 @@ blocks:
     dc_offs_enb7: default
     dc_offs_enb8: default
     dc_offs_enb9: default
-    dev_addr: '"addr=192.168.10.2"'
+    dev_addr: '"addr=192.168.30.2"'
     dev_args: '"recv_frame_size=8000"'
     gain0: recv_gain
     gain1: '0'
@@ -1440,7 +1440,7 @@ blocks:
     start_time: '-1.0'
     stream_args: ''
     stream_chans: '[]'
-    sync: sync
+    sync: none
     time_source0: ''
     time_source1: ''
     time_source2: ''
@@ -1454,7 +1454,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1104, 400.0]
+    coordinate: [1184, 332.0]
     rotation: 0
     state: disabled
 - name: uhd_usrp_source_0_0
@@ -1632,8 +1632,8 @@ blocks:
     dc_offs_enb7: default
     dc_offs_enb8: default
     dc_offs_enb9: default
-    dev_addr: '"addr=192.168.10.2"'
-    dev_args: '"recv_frame_size=1472"'
+    dev_addr: '"addr=192.168.30.2"'
+    dev_args: '"recv_frame_size=8000,num_recv_frames=512"'
     gain0: recv_gain
     gain1: recv_gain
     gain10: '0'
@@ -1830,7 +1830,7 @@ blocks:
     minoutbuf: '0'
     nchan: '2'
     num_mboards: '1'
-    otw: ''
+    otw: sc16
     rx_agc0: Default
     rx_agc1: Default
     rx_agc10: Default
@@ -1876,7 +1876,7 @@ blocks:
     start_time: '-1.0'
     stream_args: ''
     stream_chans: '[]'
-    sync: sync
+    sync: none
     time_source0: ''
     time_source1: ''
     time_source2: ''
@@ -1890,9 +1890,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1104, 692.0]
+    coordinate: [1176, 604.0]
     rotation: 0
-    state: true
+    state: disabled
 - name: usrp_ble_data_send_0
   id: usrp_ble_data_send
   parameters:
@@ -1907,7 +1907,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [88, 680.0]
+    coordinate: [128, 612.0]
     rotation: 0
     state: true
 - name: usrp_ble_data_send_0_0
@@ -1924,7 +1924,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [88, 768.0]
+    coordinate: [128, 692.0]
     rotation: 0
     state: true
 - name: usrp_ble_data_store_0
@@ -1934,15 +1934,15 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/cs_gnuradio/data_store_2
+    path: /home/ubuntu/zz_ble_cs_gnuradio/hop/data_store_2
     skip_len: '30000'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1512, 656.0]
+    coordinate: [1584, 588.0]
     rotation: 0
-    state: true
+    state: disabled
 - name: usrp_ble_data_store_0_0
   id: usrp_ble_data_store
   parameters:
@@ -1950,15 +1950,15 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/cs_gnuradio/data_store_1
+    path: /home/ubuntu/zz_ble_cs_gnuradio/hop/data_store_1
     skip_len: '30000'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1512, 776.0]
+    coordinate: [1584, 700.0]
     rotation: 0
-    state: true
+    state: disabled
 - name: usrp_ble_interact_center_0
   id: usrp_ble_interact_center
   parameters:
@@ -1968,7 +1968,7 @@ blocks:
     maxoutbuf: '0'
     minoutbuf: '0'
     repeat_total: '1'
-    sample_rate: '100000000'
+    sample_rate: int(samp_rate)
     start_btn: start_button
     stop_btn: stop_button
     wait_time_ms: '1000.0'
@@ -1976,9 +1976,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [264, 1016.0]
+    coordinate: [304, 944.0]
     rotation: 0
-    state: true
+    state: disabled
 
 connections:
 - [analog_sig_source_x_0, '0', blocks_add_xx_0, '0']
@@ -2005,4 +2005,4 @@ connections:
 
 metadata:
   file_format: 1
-  grc_version: 3.10.9.2
+  grc_version: 3.10.7.0

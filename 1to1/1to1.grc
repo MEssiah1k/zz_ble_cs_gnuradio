@@ -70,7 +70,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: 100e6
+    value: 20e6
   states:
     bus_sink: false
     bus_source: false
@@ -731,8 +731,8 @@ blocks:
     ant7: TX/RX
     ant8: TX/RX
     ant9: TX/RX
-    bw0: 10e3
-    bw1: 10e3
+    bw0: samp_rate
+    bw1: samp_rate
     bw10: '0'
     bw11: '0'
     bw12: '0'
@@ -805,8 +805,8 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dev_addr: '"addr=192.168.10.2"'
-    dev_args: '"recv_frame_size=1472"'
+    dev_addr: '"addr=192.168.30.2"'
+    dev_args: '"send_frame_size=8000"'
     gain0: send_gain
     gain1: send_gain
     gain10: '0'
@@ -952,7 +952,7 @@ blocks:
     sd_spec7: ''
     show_lo_controls: 'False'
     start_time: '-1.0'
-    stream_args: ''
+    stream_args: peak=0.003906
     stream_chans: '[]'
     sync: sync
     time_source0: ''
@@ -1582,8 +1582,8 @@ blocks:
     dc_offs_enb7: default
     dc_offs_enb8: default
     dc_offs_enb9: default
-    dev_addr: '"addr=192.168.10.2"'
-    dev_args: '"recv_frame_size=1472"'
+    dev_addr: '"addr=192.168.30.2"'
+    dev_args: '"recv_frame_size=8000"'
     gain0: recv_gain
     gain1: recv_gain
     gain10: '0'
@@ -1780,7 +1780,7 @@ blocks:
     minoutbuf: '0'
     nchan: '2'
     num_mboards: '1'
-    otw: ''
+    otw: sc16
     rx_agc0: Default
     rx_agc1: Default
     rx_agc10: Default
@@ -1884,7 +1884,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator
+    path: /home/ubuntu/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator
     skip_len: '50000'
   states:
     bus_sink: false
@@ -1900,7 +1900,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector
+    path: /home/ubuntu/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector
     skip_len: '50000'
   states:
     bus_sink: false
@@ -1918,7 +1918,7 @@ blocks:
     maxoutbuf: '0'
     minoutbuf: '0'
     repeat_total: '3'
-    sample_rate: '100000000'
+    sample_rate: int(samp_rate)
     start_btn: start_button
     stop_btn: stop_button
     wait_time_ms: '10'
@@ -1993,4 +1993,4 @@ connections:
 
 metadata:
   file_format: 1
-  grc_version: 3.10.9.2
+  grc_version: 3.10.7.0

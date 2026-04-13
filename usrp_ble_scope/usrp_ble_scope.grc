@@ -81,7 +81,7 @@ blocks:
     start: '0'
     step: '1'
     stop: '40'
-    value: '0'
+    value: '20'
     widget: counter_slider
   states:
     bus_sink: false
@@ -125,7 +125,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/mess1ah/zz_ble_cs_gnuradio/usrp_ble_scope/ble_cs_scope_ch0.c64
+    file: /home/ubuntu/zz_ble_cs_gnuradio/usrp_ble_scope/ble_cs_scope_ch0.c64
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -133,7 +133,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [632, 204.0]
+    coordinate: [688, 204.0]
     rotation: 0
     state: enabled
 - name: blocks_head_0
@@ -329,7 +329,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [672, 340.0]
+    coordinate: [672, 348.0]
     rotation: 0
     state: enabled
 - name: qtgui_waterfall_sink_x_0
@@ -568,8 +568,8 @@ blocks:
     dc_offs_enb7: default
     dc_offs_enb8: default
     dc_offs_enb9: default
-    dev_addr: '"addr=192.168.10.2"'
-    dev_args: '"recv_frame_size=1472"'
+    dev_addr: '"addr=192.168.30.2"'
+    dev_args: '"recv_frame_size=8000"'
     gain0: recv_gain
     gain1: '0'
     gain10: '0'
@@ -840,4 +840,4 @@ connections:
 
 metadata:
   file_format: 1
-  grc_version: 3.10.9.2
+  grc_version: 3.10.7.0

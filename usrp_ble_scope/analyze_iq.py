@@ -6,6 +6,7 @@
 - scan：自动检测 burst，输出 bursts.csv。
 - burst：按 burst_id 或样本范围切出单个 burst，画局部细节图。
 - gfsk：对单个 burst 做频移、降采样和 quadrature demod，观察 GFSK 瞬时频率。
+- plus：一次性做总览、严格扫描、逐个 burst 细节和 GFSK 图。
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from scipy import signal
 
 
 BYTES_PER_COMPLEX64 = 8
-COMMANDS = {"overview", "scan", "burst", "gfsk"}
+COMMANDS = {"overview", "scan", "burst", "gfsk", "plus"}
 
 
 def load_metadata(path: Path | None) -> dict[str, Any]:
@@ -409,6 +410,93 @@ def plot_gfsk(
     plt.close()
 
 
+def save_burst_detail_outputs(
+    args: argparse.Namespace,
+    info: dict[str, Any],
+    sample_rate: float,
+    center_freq: float,
+    output_dir: Path,
+) -> dict[str, Path]:
+    start = int(info["padded_start_sample"])
+    end = int(info["padded_end_sample"])
+    x = read_complex_window(args.iq_file, start, end - start)
+    peak_freq, peak_offset = estimate_peak_frequency(x, sample_rate, center_freq)
+    burst_id = info["burst_id"]
+    prefix = output_dir / f"{args.iq_file.stem}_burst_{burst_id}"
+
+    plot_burst_detail(x, sample_rate, center_freq, prefix, args.nfft, args.noverlap, args.max_time_points)
+    detail = dict(info)
+    detail.update(
+        {
+            "sample_rate": sample_rate,
+            "center_freq": center_freq,
+            "analysis_start_sample": start,
+            "analysis_end_sample": end,
+            "estimated_peak_freq_hz": peak_freq,
+            "estimated_offset_hz": peak_offset,
+        }
+    )
+    detail_path = prefix.with_name(prefix.name + "_detail.json")
+    detail_path.write_text(json.dumps(detail, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {
+        "amplitude": prefix.with_name(prefix.name + "_amplitude.png"),
+        "iq": prefix.with_name(prefix.name + "_iq.png"),
+        "spectrogram": prefix.with_name(prefix.name + "_spectrogram.png"),
+        "detail": detail_path,
+    }
+
+
+def save_gfsk_outputs(
+    args: argparse.Namespace,
+    info: dict[str, Any],
+    sample_rate: float,
+    center_freq: float,
+    output_dir: Path,
+) -> dict[str, Path]:
+    start = int(info["padded_start_sample"])
+    end = int(info["padded_end_sample"])
+    x = read_complex_window(args.iq_file, start, end - start)
+
+    _, estimated_offset = estimate_peak_frequency(x, sample_rate, center_freq)
+    target_offset = estimated_offset if args.target_offset is None else args.target_offset
+    baseband = mix_down(x, sample_rate, target_offset)
+    baseband_ds, demod_rate = decimate_for_gfsk(baseband, sample_rate, args.target_rate)
+    demod_hz = quadrature_demod(baseband_ds, demod_rate)
+
+    burst_id = info["burst_id"]
+    prefix = output_dir / f"{args.iq_file.stem}_burst_{burst_id}"
+    gfsk_max_time_points = getattr(args, "gfsk_max_time_points", args.max_time_points)
+    plot_gfsk(baseband_ds, demod_hz, demod_rate, demod_rate, prefix, gfsk_max_time_points)
+
+    result = dict(info)
+    result.update(
+        {
+            "sample_rate": sample_rate,
+            "center_freq": center_freq,
+            "analysis_start_sample": start,
+            "analysis_end_sample": end,
+            "estimated_offset_hz": estimated_offset,
+            "used_target_offset_hz": target_offset,
+            "demod_sample_rate": demod_rate,
+            "demod_mean_hz": float(np.mean(demod_hz)) if demod_hz.size else 0.0,
+            "demod_std_hz": float(np.std(demod_hz)) if demod_hz.size else 0.0,
+        }
+    )
+    result_path = prefix.with_name(prefix.name + "_gfsk.json")
+    result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    paths = {
+        "baseband_amplitude": prefix.with_name(prefix.name + "_baseband_amplitude.png"),
+        "gfsk_demod": prefix.with_name(prefix.name + "_gfsk_demod.png"),
+        "gfsk": result_path,
+    }
+    if args.save_baseband:
+        bb_path = prefix.with_name(prefix.name + "_baseband.c64")
+        baseband_ds.astype(np.complex64).tofile(bb_path)
+        paths["baseband"] = bb_path
+    return paths
+
+
 def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("iq_file", type=Path, help="complex64 IQ 文件，例如 ble_cs_scope_ch0.c64")
     parser.add_argument("--metadata", type=Path, help="metadata.json；不传则需要 --sample-rate")
@@ -419,9 +507,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
 
 def add_scan_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--start-sample", type=int, default=0, help="扫描窗口起始样本")
-    parser.add_argument("--max-samples", type=int, default=5_000_000, help="最多读取多少个样本")
-    parser.add_argument("--threshold-sigma", type=float, default=8.0, help="burst 门限：median + N * MAD")
-    parser.add_argument("--min-burst-us", type=float, default=2.0, help="最短 burst 时长，小于该值会被过滤")
+    parser.add_argument("--max-samples", type=int, default=10_000_000, help="最多读取多少个样本")
+    parser.add_argument("--threshold-sigma", type=float, default=15.0, help="burst 门限：median + N * MAD")
+    parser.add_argument("--min-burst-us", type=float, default=50.0, help="最短 burst 时长，小于该值会被过滤")
     parser.add_argument("--merge-gap-us", type=float, default=2.0, help="合并短于该间隔的 burst 缝隙")
     parser.add_argument("--pad-us", type=float, default=5.0, help="记录 burst 周围额外样本，方便后续分析")
     parser.add_argument("--max-time-points", type=int, default=20_000, help="overview 时域图最多绘制多少个点")
@@ -435,9 +523,9 @@ def add_burst_selector_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--start-sample", type=int, help="手动指定 burst 起始样本；需同时指定 --end-sample")
     parser.add_argument("--end-sample", type=int, help="手动指定 burst 结束样本；需同时指定 --start-sample")
     parser.add_argument("--scan-start-sample", type=int, default=0, help="自动找 burst 时的扫描起点")
-    parser.add_argument("--scan-max-samples", type=int, default=5_000_000, help="自动找 burst 时的最大扫描样本数")
-    parser.add_argument("--threshold-sigma", type=float, default=8.0, help="自动找 burst 的门限")
-    parser.add_argument("--min-burst-us", type=float, default=2.0, help="自动找 burst 的最短时长")
+    parser.add_argument("--scan-max-samples", type=int, default=10_000_000, help="自动找 burst 时的最大扫描样本数")
+    parser.add_argument("--threshold-sigma", type=float, default=15.0, help="自动找 burst 的门限")
+    parser.add_argument("--min-burst-us", type=float, default=50.0, help="自动找 burst 的最短时长")
     parser.add_argument("--merge-gap-us", type=float, default=2.0, help="自动找 burst 的合并间隔")
     parser.add_argument("--pad-us", type=float, default=5.0, help="自动找 burst 后向两侧扩展多少 us")
 
@@ -468,6 +556,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
     gfsk.add_argument("--target-rate", type=float, default=4e6, help="降采样后的观察采样率")
     gfsk.add_argument("--max-time-points", type=int, default=50_000, help="GFSK 图最多绘制多少个点")
     gfsk.add_argument("--save-baseband", action="store_true", help="保存下变频/降采样后的 burst complex64")
+
+    plus = subparsers.add_parser("plus", help="总览、严格扫描，并逐个输出 burst 细节和 GFSK")
+    add_common_args(plus)
+    add_scan_args(plus)
+    plus.set_defaults(threshold_sigma=20.0, min_burst_us=100.0)
+    plus.add_argument("--target-offset", type=float, help="所有 burst 共用的目标频偏 Hz；默认每个 burst 单独 FFT 估计")
+    plus.add_argument("--target-rate", type=float, default=4e6, help="降采样后的观察采样率")
+    plus.add_argument("--gfsk-max-time-points", type=int, default=50_000, help="GFSK 图最多绘制多少个点")
+    plus.add_argument("--save-baseband", action="store_true", help="保存每个 burst 下变频/降采样后的 complex64")
     return parser
 
 
@@ -558,32 +655,12 @@ def command_burst(args: argparse.Namespace) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     info = load_burst_by_id(args, sample_rate, center_freq)
-    start = int(info["padded_start_sample"])
-    end = int(info["padded_end_sample"])
-    x = read_complex_window(args.iq_file, start, end - start)
-    peak_freq, peak_offset = estimate_peak_frequency(x, sample_rate, center_freq)
     burst_id = info["burst_id"]
-    prefix = output_dir / f"{args.iq_file.stem}_burst_{burst_id}"
-
-    plot_burst_detail(x, sample_rate, center_freq, prefix, args.nfft, args.noverlap, args.max_time_points)
-    detail = dict(info)
-    detail.update(
-        {
-            "sample_rate": sample_rate,
-            "center_freq": center_freq,
-            "analysis_start_sample": start,
-            "analysis_end_sample": end,
-            "estimated_peak_freq_hz": peak_freq,
-            "estimated_offset_hz": peak_offset,
-        }
-    )
-    detail_path = prefix.with_name(prefix.name + "_detail.json")
-    detail_path.write_text(json.dumps(detail, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    paths = save_burst_detail_outputs(args, info, sample_rate, center_freq, output_dir)
 
     print(f"burst_id: {burst_id}")
-    print(f"window: {start}..{end}")
-    print(f"estimated_offset_hz: {peak_offset:.3f}")
-    print(f"detail: {detail_path}")
+    print(f"window: {info['padded_start_sample']}..{info['padded_end_sample']}")
+    print(f"detail: {paths['detail']}")
     return 0
 
 
@@ -595,47 +672,119 @@ def command_gfsk(args: argparse.Namespace) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     info = load_burst_by_id(args, sample_rate, center_freq)
-    start = int(info["padded_start_sample"])
-    end = int(info["padded_end_sample"])
-    x = read_complex_window(args.iq_file, start, end - start)
-
-    _, estimated_offset = estimate_peak_frequency(x, sample_rate, center_freq)
-    target_offset = estimated_offset if args.target_offset is None else args.target_offset
-    baseband = mix_down(x, sample_rate, target_offset)
-    baseband_ds, demod_rate = decimate_for_gfsk(baseband, sample_rate, args.target_rate)
-    demod_hz = quadrature_demod(baseband_ds, demod_rate)
-
     burst_id = info["burst_id"]
-    prefix = output_dir / f"{args.iq_file.stem}_burst_{burst_id}"
-    plot_gfsk(baseband_ds, demod_hz, demod_rate, demod_rate, prefix, args.max_time_points)
-
-    result = dict(info)
-    result.update(
-        {
-            "sample_rate": sample_rate,
-            "center_freq": center_freq,
-            "analysis_start_sample": start,
-            "analysis_end_sample": end,
-            "estimated_offset_hz": estimated_offset,
-            "used_target_offset_hz": target_offset,
-            "demod_sample_rate": demod_rate,
-            "demod_mean_hz": float(np.mean(demod_hz)) if demod_hz.size else 0.0,
-            "demod_std_hz": float(np.std(demod_hz)) if demod_hz.size else 0.0,
-        }
-    )
-    result_path = prefix.with_name(prefix.name + "_gfsk.json")
-    result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-
-    if args.save_baseband:
-        bb_path = prefix.with_name(prefix.name + "_baseband.c64")
-        baseband_ds.astype(np.complex64).tofile(bb_path)
-        print(f"baseband: {bb_path}")
+    paths = save_gfsk_outputs(args, info, sample_rate, center_freq, output_dir)
 
     print(f"burst_id: {burst_id}")
-    print(f"used_target_offset_hz: {target_offset:.3f}")
-    print(f"demod_rate: {demod_rate:g}")
-    print(f"gfsk_plot: {prefix.with_name(prefix.name + '_gfsk_demod.png')}")
-    print(f"result: {result_path}")
+    if "baseband" in paths:
+        print(f"baseband: {paths['baseband']}")
+    print(f"gfsk_plot: {paths['gfsk_demod']}")
+    print(f"result: {paths['gfsk']}")
+    return 0
+
+
+def command_plus(args: argparse.Namespace) -> int:
+    metadata = load_metadata(args.metadata)
+    sample_rate = infer_sample_rate(args, metadata)
+    center_freq = infer_center_freq(args, metadata)
+    output_dir = output_dir_for(args)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    x = read_complex_window(args.iq_file, args.start_sample, args.max_samples)
+    bursts, threshold = detect_bursts(
+        x,
+        sample_rate,
+        center_freq,
+        args.start_sample,
+        args.threshold_sigma,
+        args.min_burst_us,
+        args.merge_gap_us,
+        args.pad_us,
+    )
+    stem = args.iq_file.stem
+
+    amplitude_path = output_dir / f"{stem}_amplitude.png"
+    spectrogram_path = output_dir / f"{stem}_spectrogram.png"
+    summary_path = output_dir / f"{stem}_summary.json"
+    csv_path = output_dir / f"{stem}_bursts.csv"
+    bursts_json_path = output_dir / f"{stem}_bursts.json"
+    index_path = output_dir / f"{stem}_plus_index.json"
+
+    plot_amplitude(x, sample_rate, amplitude_path, args.max_time_points)
+    plot_spectrogram(x, sample_rate, center_freq, spectrogram_path, args.nfft, args.noverlap, args.cmap)
+
+    summary = summarize_signal(x, sample_rate, threshold, len(bursts))
+    summary.update(
+        {
+            "iq_file": str(args.iq_file),
+            "sample_rate": sample_rate,
+            "center_freq": center_freq,
+            "start_sample": args.start_sample,
+            "max_samples": args.max_samples,
+            "threshold_sigma": args.threshold_sigma,
+            "min_burst_us": args.min_burst_us,
+            "merge_gap_us": args.merge_gap_us,
+            "pad_us": args.pad_us,
+        }
+    )
+    summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_bursts_csv(csv_path, bursts)
+    bursts_json_path.write_text(
+        json.dumps({"threshold": threshold, "bursts": bursts}, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    outputs: list[dict[str, Any]] = []
+    for info in bursts:
+        detail_paths = save_burst_detail_outputs(args, info, sample_rate, center_freq, output_dir)
+        gfsk_paths = save_gfsk_outputs(args, info, sample_rate, center_freq, output_dir)
+        outputs.append(
+            {
+                "burst_id": info["burst_id"],
+                "start_sample": info["start_sample"],
+                "end_sample": info["end_sample"],
+                "duration_us": info["duration_us"],
+                "estimated_offset_hz": info["estimated_offset_hz"],
+                "detail_outputs": {key: str(path) for key, path in detail_paths.items()},
+                "gfsk_outputs": {key: str(path) for key, path in gfsk_paths.items()},
+            }
+        )
+        print(
+            "burst_id={burst_id} duration_us={duration_us:.2f} offset_hz={offset:.3f} detail={detail} gfsk={gfsk}".format(
+                burst_id=info["burst_id"],
+                duration_us=info["duration_us"],
+                offset=info["estimated_offset_hz"],
+                detail=detail_paths["detail"],
+                gfsk=gfsk_paths["gfsk"],
+            )
+        )
+
+    index = {
+        "iq_file": str(args.iq_file),
+        "output_dir": str(output_dir),
+        "threshold": threshold,
+        "burst_count": len(bursts),
+        "overview_outputs": {
+            "amplitude": str(amplitude_path),
+            "spectrogram": str(spectrogram_path),
+            "summary": str(summary_path),
+        },
+        "scan_outputs": {
+            "csv": str(csv_path),
+            "json": str(bursts_json_path),
+        },
+        "burst_outputs": outputs,
+    }
+    index_path.write_text(json.dumps(index, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    print(f"overview_amplitude: {amplitude_path}")
+    print(f"overview_spectrogram: {spectrogram_path}")
+    print(f"summary: {summary_path}")
+    print(f"bursts: {len(bursts)}")
+    print(f"threshold: {threshold:.6g}")
+    print(f"csv: {csv_path}")
+    print(f"json: {bursts_json_path}")
+    print(f"index: {index_path}")
     return 0
 
 
@@ -651,6 +800,8 @@ def main() -> int:
         return command_burst(args)
     if args.command == "gfsk":
         return command_gfsk(args)
+    if args.command == "plus":
+        return command_plus(args)
     raise SystemExit(f"未知命令：{args.command}")
 
 

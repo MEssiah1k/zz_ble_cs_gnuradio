@@ -7,3 +7,5 @@ output_plot_bin
 */data_initiator_rx_from_reflectors/
 */data_reflector1_rx_from_initiator/
 */data_reflector2_rx_from_initiator/
+*/data_*
+*/analysis*

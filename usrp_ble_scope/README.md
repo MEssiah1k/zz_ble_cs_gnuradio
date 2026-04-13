@@ -127,7 +127,7 @@ python3 usrp_ble_scope/analyze_iq.py \
   --metadata usrp_ble_scope/captures/ble_cs_scope_YYYYmmdd_HHMMSS/metadata.json
 ```
 
-默认只读取前 `5,000,000` 个样本，避免 100 MS/s 大文件直接占满内存。需要观察更长时间时可以调大：
+默认读取前 `10,000,000` 个样本；在 100 MS/s 下正好是 0.1 秒。需要观察更长时间时可以调大：
 
 ```bash
 python3 usrp_ble_scope/analyze_iq.py \
@@ -158,6 +158,37 @@ python3 usrp_ble_scope/analyze_iq.py scan \
 - `analysis/*_bursts.json`
 
 里面会记录每个 burst 的起止样本、时间、持续时间、峰值幅度、粗略频点估计。
+
+默认检测门限比较保守：
+
+```text
+threshold = median(|IQ|) + 15 * MAD(|IQ|)
+min_burst_us = 50
+```
+
+这是为了配合当前每秒约 12 个 CS 样本的节奏，减少把空口噪声、Wi-Fi 或其他 2.4 GHz 信号误判成 CS burst。
+
+### 2.1 一键严格分析
+
+如果要一次性画全时长总览、按高门限扫描所有 burst，并逐个输出局部图和 GFSK 图：
+
+```bash
+python3 usrp_ble_scope/analyze_iq.py plus \
+  usrp_ble_scope/ble_cs_scope_ch0.c64 \
+  --sample-rate 100e6 \
+  --center-freq 2.44e9
+```
+
+`plus` 默认使用：
+
+```text
+--max-samples 10000000
+--threshold-sigma 20
+--min-burst-us 100
+--target-rate 4e6
+```
+
+每个 burst 的细节和 GFSK 都来自同一次扫描结果，不会出现 `burst_id` 重新扫描后对不上的问题。输出里还会生成 `*_plus_index.json`，集中记录总览图、扫描结果和每个 burst 的 detail/GFSK 文件路径。
 
 ### 3. 查看某一个 burst
 
