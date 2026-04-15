@@ -1,0 +1,41 @@
+id: usrp_ble_tx_burst_gate
+label: tx_burst_gate
+category: '[usrp_ble]'
+
+templates:
+  imports: from gnuradio import usrp_ble
+  make: usrp_ble.tx_burst_gate(${num_channels}, ${burst_len}, ${add_uhd_tags})
+  callbacks:
+  - set_burst_len(${burst_len})
+
+parameters:
+- id: num_channels
+  label: Num Channels
+  dtype: int
+  default: 2
+  options: [1, 2, 3]
+- id: burst_len
+  label: Burst Length (samples)
+  dtype: int
+  default: 100000
+- id: add_uhd_tags
+  label: Add UHD SOB/EOB Tags
+  dtype: bool
+  default: 'True'
+
+inputs:
+- label: command
+  domain: message
+  optional: 1
+- label: in
+  domain: stream
+  dtype: complex
+  multiplicity: ${num_channels}
+
+outputs:
+- label: out
+  domain: stream
+  dtype: complex
+  multiplicity: ${num_channels}
+
+file_format: 1

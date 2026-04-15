@@ -54,6 +54,7 @@ namespace gr {
       int _repeat_total;             // 每个频点需要重复采集的总次数
       int _repeat_index;             // 当前频点已经进行到第几次重复（从 0 开始）
       bool _is_running;              // 整个实验流程是否正在运行
+      bool _use_msg_clock;           // 是否使用消息计时，self_2 用真实 burst 消费量推进状态机
       size_t _samples_to_wait;       // 当前每个阶段应等待的总采样点数量
       size_t _wait_counter;          // 当前阶段已经累计等待的采样点数量
       int _state;                    // 状态机编号：0 空闲，1 第一阶段，2 第二阶段
@@ -65,6 +66,7 @@ namespace gr {
        * 当前实现里状态推进逻辑直接写在 work() 中，这个接口尚未使用。
        */
       void process_state_machine(int nitems);
+      void handle_clock_msg(pmt::pmt_t msg);
 
       /*
        * 函数说明：
@@ -107,6 +109,7 @@ namespace gr {
       void set_start_btn(bool start_btn) override;
       void set_stop_btn(bool stop_btn) override;
       void set_wait_time_ms(float wait_time_ms) override;
+      void set_use_msg_clock(bool use_msg_clock) override;
 
       /*
        * 函数说明：

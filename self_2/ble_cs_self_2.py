@@ -69,7 +69,7 @@ class ble_cs_self_2(gr.top_block, Qt.QWidget):
         self.samp_rate = samp_rate = 100e6
         self.recv_gain = recv_gain = 0
         self.distance_m_2 = distance_m_2 = 5
-        self.distance_m_1 = distance_m_1 = 3
+        self.distance_m_1 = distance_m_1 = 2
         self.centetr_fre = centetr_fre = 2.44e9
 
         ##################################################
@@ -88,13 +88,15 @@ class ble_cs_self_2(gr.top_block, Qt.QWidget):
         _start_button_push_button.pressed.connect(lambda: self.set_start_button(self._start_button_choices['Pressed']))
         _start_button_push_button.released.connect(lambda: self.set_start_button(self._start_button_choices['Released']))
         self.top_layout.addWidget(_start_button_push_button)
+        self.usrp_ble_tx_burst_gate_0 = usrp_ble.tx_burst_gate(3, 80000, True)
         self.usrp_ble_random_phase_2 = usrp_ble.random_phase(3, 1.0)
         self.usrp_ble_random_phase_1 = usrp_ble.random_phase(2, 1.0)
         self.usrp_ble_random_phase_0 = usrp_ble.random_phase(1, 1.0)
         self.usrp_ble_interact_center_0 = usrp_ble.interact_center(100000000, start_button, stop_button, 10, 3)
+        self.usrp_ble_interact_center_0.set_use_msg_clock(False)
         self.usrp_ble_data_store_0_2 = usrp_ble.data_store(200, 50000, '/home/mess1ah/zz_ble_cs_gnuradio/self_2/data_initiator_rx_from_reflectors')
-        self.usrp_ble_data_store_0_1 = usrp_ble.data_store(200, 50000, '/home/mess1ah/zz_ble_cs_gnuradio/self_2/data_reflector1_rx_from_initiator')
-        self.usrp_ble_data_store_0_0_0 = usrp_ble.data_store(200, 50000, '/home/mess1ah/zz_ble_cs_gnuradio/self_2/data_reflector2_rx_from_initiator')
+        self.usrp_ble_data_store_0_1 = usrp_ble.data_store(200, 35000, '/home/mess1ah/zz_ble_cs_gnuradio/self_2/data_reflector1_rx_from_initiator')
+        self.usrp_ble_data_store_0_0_0 = usrp_ble.data_store(200, 35000, '/home/mess1ah/zz_ble_cs_gnuradio/self_2/data_reflector2_rx_from_initiator')
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_data_send_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_channel_phase_r2_to_i = usrp_ble.channel_phase(centetr_fre, distance_m_2, 1.0)
@@ -200,6 +202,9 @@ class ble_cs_self_2(gr.top_block, Qt.QWidget):
 
         self._qtgui_freq_sink_x_0_win = sip.wrapinstance(self.qtgui_freq_sink_x_0.qwidget(), Qt.QWidget)
         self.top_layout.addWidget(self._qtgui_freq_sink_x_0_win)
+        self.blocks_throttle_clock = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
+        self.blocks_throttle_0_0 = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
+        self.blocks_throttle_0 = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
         self.blocks_multiply_xx_r2_tx = blocks.multiply_vcc(1)
         self.blocks_multiply_xx_r1_tx = blocks.multiply_vcc(1)
         self.blocks_multiply_xx_i_tx = blocks.multiply_vcc(1)
@@ -209,6 +214,7 @@ class ble_cs_self_2(gr.top_block, Qt.QWidget):
         self.blocks_message_debug_0 = blocks.message_debug(True, gr.log_levels.info)
         self.blocks_add_xx_reflectors_at_initiator = blocks.add_vcc(1)
         self.analog_sig_source_x_0_1 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, (-49e6), 1, 0, 0)
+        self.analog_sig_source_x_0 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, 1000, 1, 0, 0)
 
 
         ##################################################
@@ -228,6 +234,9 @@ class ble_cs_self_2(gr.top_block, Qt.QWidget):
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_random_phase_0, 'freq'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_random_phase_1, 'freq'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_random_phase_2, 'freq'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'send2_ctrl'), (self.usrp_ble_tx_burst_gate_0, 'command'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'send1_ctrl'), (self.usrp_ble_tx_burst_gate_0, 'command'))
+        self.connect((self.analog_sig_source_x_0, 0), (self.blocks_throttle_clock, 0))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.usrp_ble_random_phase_0, 0))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.usrp_ble_random_phase_1, 0))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.usrp_ble_random_phase_2, 0))
@@ -235,26 +244,31 @@ class ble_cs_self_2(gr.top_block, Qt.QWidget):
         self.connect((self.blocks_multiply_conjugate_cc_i_rx, 0), (self.usrp_ble_data_store_0_2, 0))
         self.connect((self.blocks_multiply_conjugate_cc_r1_rx, 0), (self.usrp_ble_data_store_0_1, 0))
         self.connect((self.blocks_multiply_conjugate_cc_r2_rx, 0), (self.usrp_ble_data_store_0_0_0, 0))
-        self.connect((self.blocks_multiply_xx_i_tx, 0), (self.qtgui_freq_sink_x_0, 0))
-        self.connect((self.blocks_multiply_xx_i_tx, 0), (self.qtgui_time_sink_x_0, 0))
-        self.connect((self.blocks_multiply_xx_i_tx, 0), (self.usrp_ble_channel_phase_i_to_r1, 0))
-        self.connect((self.blocks_multiply_xx_i_tx, 0), (self.usrp_ble_channel_phase_i_to_r2, 0))
-        self.connect((self.blocks_multiply_xx_r1_tx, 0), (self.usrp_ble_channel_phase_r1_to_i, 0))
-        self.connect((self.blocks_multiply_xx_r2_tx, 0), (self.usrp_ble_channel_phase_r2_to_i, 0))
+        self.connect((self.blocks_multiply_xx_i_tx, 0), (self.usrp_ble_tx_burst_gate_0, 0))
+        self.connect((self.blocks_multiply_xx_r1_tx, 0), (self.usrp_ble_tx_burst_gate_0, 1))
+        self.connect((self.blocks_multiply_xx_r2_tx, 0), (self.usrp_ble_tx_burst_gate_0, 2))
+        self.connect((self.blocks_throttle_0, 0), (self.blocks_multiply_xx_i_tx, 1))
+        self.connect((self.blocks_throttle_0_0, 0), (self.blocks_multiply_xx_r1_tx, 1))
+        self.connect((self.blocks_throttle_0_0, 0), (self.blocks_multiply_xx_r2_tx, 1))
+        self.connect((self.blocks_throttle_clock, 0), (self.usrp_ble_interact_center_0, 0))
         self.connect((self.usrp_ble_channel_phase_i_to_r1, 0), (self.blocks_multiply_conjugate_cc_r1_rx, 0))
         self.connect((self.usrp_ble_channel_phase_i_to_r2, 0), (self.blocks_multiply_conjugate_cc_r2_rx, 0))
         self.connect((self.usrp_ble_channel_phase_r1_to_i, 0), (self.blocks_add_xx_reflectors_at_initiator, 0))
         self.connect((self.usrp_ble_channel_phase_r2_to_i, 0), (self.blocks_add_xx_reflectors_at_initiator, 1))
-        self.connect((self.usrp_ble_data_send_0, 0), (self.blocks_multiply_xx_i_tx, 1))
-        self.connect((self.usrp_ble_data_send_0, 0), (self.usrp_ble_interact_center_0, 0))
-        self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_multiply_xx_r1_tx, 1))
-        self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_multiply_xx_r2_tx, 1))
+        self.connect((self.usrp_ble_data_send_0, 0), (self.blocks_throttle_0, 0))
+        self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_throttle_0_0, 0))
         self.connect((self.usrp_ble_random_phase_0, 0), (self.blocks_multiply_conjugate_cc_i_rx, 1))
         self.connect((self.usrp_ble_random_phase_0, 0), (self.blocks_multiply_xx_i_tx, 0))
         self.connect((self.usrp_ble_random_phase_1, 0), (self.blocks_multiply_conjugate_cc_r1_rx, 1))
         self.connect((self.usrp_ble_random_phase_1, 0), (self.blocks_multiply_xx_r1_tx, 0))
         self.connect((self.usrp_ble_random_phase_2, 0), (self.blocks_multiply_conjugate_cc_r2_rx, 1))
         self.connect((self.usrp_ble_random_phase_2, 0), (self.blocks_multiply_xx_r2_tx, 0))
+        self.connect((self.usrp_ble_tx_burst_gate_0, 0), (self.qtgui_freq_sink_x_0, 0))
+        self.connect((self.usrp_ble_tx_burst_gate_0, 0), (self.qtgui_time_sink_x_0, 0))
+        self.connect((self.usrp_ble_tx_burst_gate_0, 0), (self.usrp_ble_channel_phase_i_to_r1, 0))
+        self.connect((self.usrp_ble_tx_burst_gate_0, 0), (self.usrp_ble_channel_phase_i_to_r2, 0))
+        self.connect((self.usrp_ble_tx_burst_gate_0, 1), (self.usrp_ble_channel_phase_r1_to_i, 0))
+        self.connect((self.usrp_ble_tx_burst_gate_0, 2), (self.usrp_ble_channel_phase_r2_to_i, 0))
 
 
     def closeEvent(self, event):
@@ -290,7 +304,11 @@ class ble_cs_self_2(gr.top_block, Qt.QWidget):
 
     def set_samp_rate(self, samp_rate):
         self.samp_rate = samp_rate
+        self.analog_sig_source_x_0.set_sampling_freq(self.samp_rate)
         self.analog_sig_source_x_0_1.set_sampling_freq(self.samp_rate)
+        self.blocks_throttle_0.set_sample_rate(self.samp_rate)
+        self.blocks_throttle_0_0.set_sample_rate(self.samp_rate)
+        self.blocks_throttle_clock.set_sample_rate(self.samp_rate)
         self.qtgui_freq_sink_x_0.set_frequency_range(0, self.samp_rate)
         self.qtgui_time_sink_x_0.set_samp_rate(self.samp_rate)
         self.usrp_ble_data_send_0.set_sample_rate(self.samp_rate)

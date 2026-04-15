@@ -51,6 +51,7 @@ namespace gr {
         _repeat_total(std::max(1, repeat_total)), // 至少重复 1 次，避免非法参数破坏状态机
         _repeat_index(0),           // 每次启动都从当前频点的第一次重复开始
         _is_running(false),         // 初始状态机处于停止态
+        _use_msg_clock(false),      // 默认沿用原来的流输入计时模式
         _wait_counter(0),           // 当前阶段累计等待计数清零
         _state(0)                   // 初始状态设为空闲态
     {
@@ -60,6 +61,10 @@ namespace gr {
         message_port_register_out(pmt::mp("store1_ctrl")); // 第一组存储块控制口
         message_port_register_out(pmt::mp("store2_ctrl")); // 第二组存储块控制口
         message_port_register_out(pmt::mp("freq_ctrl"));   // 频率控制口
+        message_port_register_out(pmt::mp("phase_ctrl"));  // 当前阶段选择口：0=phase1，1=phase2
+        message_port_register_in(pmt::mp("clock"));        // 可选消息计时口，用于 self_2 的双 gate 真实样本计时
+        set_msg_handler(pmt::mp("clock"),
+                        [this](pmt::pmt_t msg) { this->handle_clock_msg(msg); });
 
         // 通过输入流经过的样本数来近似计时，因此需要先把毫秒换算成采样点。
         _samples_to_wait = (size_t)(_sample_rate * (_wait_time_ms / 1000.0f)); // 目标等待样本数
@@ -108,6 +113,28 @@ namespace gr {
         _samples_to_wait = (size_t)(_sample_rate * (_wait_time_ms / 1000.0f)); // 毫秒重新换算为采样点
     }
 
+    void interact_center_impl::set_use_msg_clock(bool use_msg_clock)
+    {
+        _use_msg_clock = use_msg_clock;
+    }
+
+    void interact_center_impl::handle_clock_msg(pmt::pmt_t msg)
+    {
+        if (!_use_msg_clock) {
+            return;
+        }
+
+        pmt::pmt_t value = pmt::is_pair(msg) ? pmt::cdr(msg) : msg;
+        if (!pmt::is_integer(value)) {
+            return;
+        }
+
+        const long nitems = pmt::to_long(value);
+        if (nitems > 0) {
+            process_state_machine(static_cast<int>(nitems));
+        }
+    }
+
     void interact_center_impl::send_phase1_start()
     {
         // 第一阶段执行策略：
@@ -116,8 +143,10 @@ namespace gr {
         // 这样可以保证两个通路不会同时工作。
         message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_stop"));   // 先停第二组发送
         message_port_pub(pmt::mp("store2_ctrl"), pmt::intern("store_stop")); // 再停第二组存储
-        message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_start"));  // 启动第一组发送
+        message_port_pub(pmt::mp("phase_ctrl"), pmt::cons(pmt::PMT_NIL, pmt::from_long(0))); // selector 的 iindex 口需要 pair 消息
+        // burst 发送窗口很短，必须先打开采集窗口，再启动发送。
         message_port_pub(pmt::mp("store1_ctrl"), make_store_start_msg()); // 启动第一组存储，并带上频点/重复编号
+        message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_start"));  // 启动第一组发送
     }
     
     void interact_center_impl::send_phase2_start()
@@ -126,9 +155,11 @@ namespace gr {
         // 停止第一组，启动第二组。
         message_port_pub(pmt::mp("store1_ctrl"), pmt::intern("store_stop")); // 关闭第一组存储
         message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_stop"));   // 关闭第一组发送
+        message_port_pub(pmt::mp("phase_ctrl"), pmt::cons(pmt::PMT_NIL, pmt::from_long(1))); // phase2 选择 reflector gate 输出计时
         
-        message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_start"));   // 启动第二组发送
+        // burst 发送窗口很短，必须先打开采集窗口，再启动发送。
         message_port_pub(pmt::mp("store2_ctrl"), make_store_start_msg()); // 启动第二组存储，并带上频点/重复编号
+        message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_start"));   // 启动第二组发送
     }
     
     void interact_center_impl::send_all_stop()
@@ -164,20 +195,14 @@ namespace gr {
         return static_cast<int>((_current_freq + 40000000.0) / 1000000.0 + 0.5);
     }
 
-    int
-    interact_center_impl::work(int noutput_items,
-        gr_vector_const_void_star &input_items,
-        gr_vector_void_star &output_items)
+    void interact_center_impl::process_state_machine(int nitems)
     {
-      auto in = static_cast<const input_type*>(input_items[0]); // 取输入缓冲区，虽然数据值本身不用，但接口上仍要拿到
-      (void)in; // 明确告诉编译器这里故意不使用输入值，只使用样本数量
-
         // 通过本次 work 收到的样本数量推进状态机。
         // 这里的“等待”不是 wall clock 时间，而是“经过了多少输入采样点”。
         if (_is_running) {
              size_t items_processed = 0; // 记录本次 work 内已经处理了多少个样本
-             while (items_processed < noutput_items) {
-                 size_t items_remaining = noutput_items - items_processed; // 当前还剩多少样本可用于推进状态机
+             while (items_processed < static_cast<size_t>(nitems)) {
+                 size_t items_remaining = static_cast<size_t>(nitems) - items_processed; // 当前还剩多少样本可用于推进状态机
                  
                  if (_state == 1) { // 第一阶段等待 send1/store1 运行满设定时长
                      if (_wait_counter + items_remaining >= _samples_to_wait) {
@@ -230,6 +255,19 @@ namespace gr {
                  }
              }
         }
+    }
+
+    int
+    interact_center_impl::work(int noutput_items,
+        gr_vector_const_void_star &input_items,
+        gr_vector_void_star &output_items)
+    {
+      auto in = static_cast<const input_type*>(input_items[0]); // 取输入缓冲区，虽然数据值本身不用，但接口上仍要拿到
+      (void)in; // 明确告诉编译器这里故意不使用输入值，只使用样本数量
+
+      if (!_use_msg_clock) {
+        process_state_machine(noutput_items);
+      }
         
       return noutput_items; // 该块虽然无输出，但要告诉调度器本轮消耗了多少输入
     }

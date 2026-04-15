@@ -325,6 +325,39 @@ def print_pair_report(records: list[dict[str, Any]]) -> None:
         print(json.dumps(row, ensure_ascii=False))
 
 
+def summarize_reports(all_reports: dict[str, Any]) -> dict[str, Any]:
+    """汇总所有 data_* 目录里的文件数量、复数采样点数量和空文件数量。"""
+    total_files = 0
+    total_iq_samples = 0
+    empty_files = 0
+    all_zero_files = 0
+    bad_files = 0
+
+    for records in all_reports["directories"].values():
+        total_files += len(records)
+        total_iq_samples += int(sum(row.get("samples", 0) for row in records))
+        empty_files += int(
+            sum(
+                1
+                for row in records
+                if row.get("samples", 0) == 0 or row.get("classification") == "empty"
+            )
+        )
+        all_zero_files += int(
+            sum(1 for row in records if row.get("classification") == "all_zero_or_invalid")
+        )
+        bad_files += int(sum(1 for row in records if not row.get("ok", False)))
+
+    return {
+        "summary": "total",
+        "files": total_files,
+        "iq_samples": total_iq_samples,
+        "empty_files": empty_files,
+        "all_zero_files": all_zero_files,
+        "bad_files": bad_files,
+    }
+
+
 def save_json(data: Any, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -386,6 +419,10 @@ def main() -> None:
     for name, records in all_reports["pairs"].items():
         print(f"== pair: {name} ==")
         print_pair_report(records)
+
+    summary = summarize_reports(all_reports)
+    all_reports["summary"] = summary
+    print(json.dumps(summary, ensure_ascii=False))
 
     if args.save_json:
         save_json(all_reports, args.output_dir / args.root.name / "full_summary.json")

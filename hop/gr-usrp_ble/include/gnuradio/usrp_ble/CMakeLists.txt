@@ -16,5 +16,7 @@ install(FILES
     data_store.h
     interact_center.h
     channel_phase.h
-    random_phase.h DESTINATION include/gnuradio/usrp_ble
+    random_phase.h
+    tx_burst_gate.h
+    phase_clock_select.h DESTINATION include/gnuradio/usrp_ble
 )

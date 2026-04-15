@@ -21,6 +21,7 @@ REFLECTOR_DIRS = {
 }
 NEW_STYLE_RE = re.compile(r"^data_f(?P<freq>\d+)_r(?P<repeat>\d+)$")
 SPEED_OF_LIGHT = 299792458.0
+DEFAULT_GRID_STEP_M = 0.01
 
 
 def resolve_root(root: Path) -> Path:
@@ -172,7 +173,7 @@ def peak_diagnostics(distance_grid: np.ndarray, scores: np.ndarray, best_idx: in
             "confidence": 1.0,
         }
 
-    step = float(abs(distance_grid[1] - distance_grid[0])) if len(distance_grid) > 1 else 0.05
+    step = float(abs(distance_grid[1] - distance_grid[0])) if len(distance_grid) > 1 else DEFAULT_GRID_STEP_M
     exclude_radius = max(0.25, 2.0 * step)
     neighbor_mask = np.abs(distance_grid - distance_grid[best_idx]) <= exclude_radius
     candidate_scores = scores[~neighbor_mask]
@@ -346,7 +347,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--outlier-mad-scale", type=float, default=8.0, help="IQ 离群点 MAD 阈值倍率")
     parser.add_argument("--grid-start-m", type=float, default=0.0, help="距离扫描起点")
     parser.add_argument("--grid-stop-m", type=float, default=30.0, help="距离扫描终点")
-    parser.add_argument("--grid-step-m", type=float, default=0.05, help="距离扫描步进")
+    parser.add_argument("--grid-step-m", type=float, default=DEFAULT_GRID_STEP_M, help="距离扫描步进")
     parser.add_argument("--score-mode", choices=("composite", "projection", "adjacent"), default="composite", help="距离扫描打分方式")
     parser.add_argument("--match-mode", choices=("multiply", "conj"), default="multiply", help="local 与 peer 的组合方式；GNU Radio 数据默认 multiply")
     parser.add_argument("--save-json", type=Path, default=None, help="保存完整估计结果到 JSON 文件")
@@ -356,6 +357,10 @@ def build_argument_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_argument_parser()
     args = parser.parse_args()
+    if args.grid_step_m <= 0:
+        raise SystemExit("--grid-step-m 必须大于 0")
+    if args.grid_stop_m < args.grid_start_m:
+        raise SystemExit("--grid-stop-m 必须大于等于 --grid-start-m")
     result = estimate_distance_multi(args)
 
     for label, row in result["reflectors"].items():

@@ -14,7 +14,7 @@
 /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
 /* BINDTOOL_USE_PYGCCXML(0)                                                        */
 /* BINDTOOL_HEADER_FILE(interact_center.h)                                        */
-/* BINDTOOL_HEADER_FILE_HASH(26dd5c3f7ed1f3ecc039b0b60a11c1f8)                     */
+/* BINDTOOL_HEADER_FILE_HASH(f255bd35e9c4b181ee037762375c4880)                     */
 /***********************************************************************************/
 
 #include <pybind11/complex.h>
@@ -57,6 +57,10 @@ void bind_interact_center(py::module& m)
             py::arg("wait_time_ms"),
             D(interact_center,set_wait_time_ms)
         )
+        .def("set_use_msg_clock", &interact_center::set_use_msg_clock,
+            py::arg("use_msg_clock"),
+            D(interact_center,set_use_msg_clock)
+        )
         
 
 
@@ -67,8 +71,6 @@ void bind_interact_center(py::module& m)
 
 
 }
-
-
 
 
 

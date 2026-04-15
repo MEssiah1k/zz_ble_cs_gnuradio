@@ -18,6 +18,8 @@ list(APPEND usrp_ble_sources
     interact_center_impl.cc
     channel_phase_impl.cc
     random_phase_impl.cc
+    tx_burst_gate_impl.cc
+    phase_clock_select_impl.cc
 )
 
 set(usrp_ble_sources "${usrp_ble_sources}" PARENT_SCOPE)
