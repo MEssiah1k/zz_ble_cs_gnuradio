@@ -9,3 +9,4 @@ output_plot_bin
 */data_reflector2_rx_from_initiator/
 */data_*
 */analysis*
+usrp_ble_scope/ble_cs_scope_ch0.c64
