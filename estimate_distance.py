@@ -6,9 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 
 from check_bin import circular_phase_spread_rad, classify_signal, phase_cluster_stats
@@ -16,6 +20,7 @@ from check_bin import circular_phase_spread_rad, classify_signal, phase_cluster_
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "self"
+DEFAULT_PLOT_DIR = PROJECT_ROOT / "output_estimate_plot"
 DIR_INITIATOR_RX = "data_initiator_rx_from_reflector"
 DIR_REFLECTOR_RX = "data_reflector_rx_from_initiator"
 NEW_STYLE_RE = re.compile(r"^data_f(?P<freq>\d+)_r(?P<repeat>\d+)$")
@@ -174,6 +179,55 @@ def average_by_freq(
     return averaged
 
 
+def save_estimate_plot(result: dict[str, Any], save_path: Path) -> None:
+    rows = result["rows"]
+    if len(rows) < 2:
+        raise SystemExit("有效频点少于 2 个，无法出图")
+
+    freqs_hz = np.array([float(row["freq_hz"]) for row in rows], dtype=float)
+    freq_mhz = freqs_hz / 1e6
+    phase_wrapped = np.array([float(row["phase_wrapped"]) for row in rows], dtype=float)
+    phase_unwrapped = np.array([float(row["phase_unwrapped"]) for row in rows], dtype=float)
+    phase_residual = np.array([float(row["phase_residual"]) for row in rows], dtype=float)
+    fitted = result["slope_rad_per_hz"] * freqs_hz + result["intercept_rad"]
+
+    fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+
+    axes[0].plot(freq_mhz, phase_wrapped, "o-", linewidth=1.2, markersize=4)
+    axes[0].set_ylabel("Wrapped Phase (rad)")
+    axes[0].set_title("Pair Phase vs Frequency")
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].plot(freq_mhz, phase_unwrapped, "o", label="unwrapped", markersize=5)
+    axes[1].plot(freq_mhz, fitted, "-", label="linear fit", linewidth=1.5)
+    axes[1].set_ylabel("Unwrapped Phase (rad)")
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+
+    axes[2].axhline(0.0, color="black", linewidth=1.0, alpha=0.6)
+    axes[2].plot(freq_mhz, phase_residual, "o-", color="tab:red", linewidth=1.2, markersize=4)
+    axes[2].set_xlabel("Frequency (MHz)")
+    axes[2].set_ylabel("Residual (rad)")
+    axes[2].grid(True, alpha=0.3)
+
+    fig.suptitle(
+        "distance={:.3f} m, rms_residual={:.4f} rad, max_abs_residual={:.4f} rad".format(
+            result["distance_m"],
+            result["rms_phase_residual"],
+            result["max_abs_phase_residual"],
+        )
+    )
+    fig.tight_layout()
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+
+
+def default_plot_path(root: Path) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return (DEFAULT_PLOT_DIR / root.name / f"estimate_fit_{timestamp}.png").resolve()
+
+
 def estimate_distance(args: argparse.Namespace) -> dict[str, Any]:
     root = resolve_root(args.root)
     initiator_dir = root / DIR_INITIATOR_RX
@@ -311,6 +365,17 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--outlier-mad-scale", type=float, default=8.0, help="IQ 离群点 MAD 阈值倍率")
     parser.add_argument("--save-json", type=Path, default=None, help="保存完整估计结果到 JSON 文件")
+    parser.add_argument(
+        "--save-plot",
+        type=Path,
+        default=None,
+        help="保存拟合诊断图到 PNG 文件，包含 wrapped/unwrapped phase、线性拟合和 residual；默认会自动保存到 output_estimate_plot/<root>/estimate_fit_<timestamp>.png",
+    )
+    parser.add_argument(
+        "--no-save-plot",
+        action="store_true",
+        help="不自动保存拟合诊断图",
+    )
     return parser
 
 
@@ -319,23 +384,27 @@ def main() -> None:
     args = parser.parse_args()
     result = estimate_distance(args)
 
-    print(json.dumps(
-        {
-            "root": result["root"],
-            "valid_freq_count": result["valid_freq_count"],
-            "distance_m": result["distance_m"],
-            "slope_rad_per_hz": result["slope_rad_per_hz"],
-            "rms_phase_residual": result["rms_phase_residual"],
-            "max_abs_phase_residual": result["max_abs_phase_residual"],
-        },
-        ensure_ascii=False,
-    ))
+    summary = {
+        "root": result["root"],
+        "valid_freq_count": result["valid_freq_count"],
+        "distance_m": result["distance_m"],
+        "slope_rad_per_hz": result["slope_rad_per_hz"],
+        "rms_phase_residual": result["rms_phase_residual"],
+        "max_abs_phase_residual": result["max_abs_phase_residual"],
+    }
+    for key, value in summary.items():
+        print(f"{key}: {value}")
 
     if args.save_json is not None:
         out_path = args.save_json.resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"saved: {out_path}")
+
+    if not args.no_save_plot:
+        plot_path = default_plot_path(resolve_root(args.root)) if args.save_plot is None else args.save_plot.resolve()
+        save_estimate_plot(result, plot_path)
+        print(f"saved plot: {plot_path}")
 
 
 if __name__ == "__main__":

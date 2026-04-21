@@ -1,0 +1,36 @@
+id: usrp_ble_capture_gate
+label: capture_gate
+category: '[usrp_ble]'
+
+templates:
+  imports: from gnuradio import usrp_ble
+  make: usrp_ble.capture_gate(${num_channels})
+
+parameters:
+- id: num_channels
+  label: Num Channels
+  dtype: int
+  default: '1'
+
+inputs:
+- label: in0
+  domain: stream
+  dtype: complex
+- label: in1
+  domain: stream
+  dtype: complex
+  optional: true
+- label: command
+  domain: message
+  id: command
+
+outputs:
+- label: out0
+  domain: stream
+  dtype: complex
+- label: out1
+  domain: stream
+  dtype: complex
+  optional: true
+
+file_format: 1

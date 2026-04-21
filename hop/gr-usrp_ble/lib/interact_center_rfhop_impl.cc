@@ -53,6 +53,7 @@ interact_center_rfhop_impl::interact_center_rfhop_impl(int sample_rate,
     message_port_register_out(pmt::mp("send2_ctrl"));
     message_port_register_out(pmt::mp("store1_ctrl"));
     message_port_register_out(pmt::mp("store2_ctrl"));
+    message_port_register_out(pmt::mp("capture_ctrl"));
     message_port_register_out(pmt::mp("freq_ctrl"));
     message_port_register_out(pmt::mp("phase_ctrl"));
 
@@ -82,6 +83,7 @@ void interact_center_rfhop_impl::set_start_btn(bool start_btn)
         d_current_freq = -40000000.0;
         d_repeat_index = 0;
         send_all_stop();
+        message_port_pub(pmt::mp("capture_ctrl"), pmt::intern("capture_start"));
         enter_settle_for_current_freq();
     }
 }
@@ -95,6 +97,7 @@ void interact_center_rfhop_impl::set_stop_btn(bool stop_btn)
         d_state = state_t::idle;
         d_wait_counter = 0;
         send_all_stop();
+        message_port_pub(pmt::mp("capture_ctrl"), pmt::intern("capture_stop"));
     }
 }
 
@@ -225,6 +228,7 @@ void interact_center_rfhop_impl::process_state_machine(int nitems)
                         d_is_running = false;
                         d_state = state_t::idle;
                         send_all_stop();
+                        message_port_pub(pmt::mp("capture_ctrl"), pmt::intern("capture_stop"));
                     } else {
                         enter_settle_for_current_freq();
                     }

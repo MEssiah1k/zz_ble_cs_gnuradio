@@ -7,6 +7,7 @@
 #
 
 install(FILES
+    usrp_ble_capture_gate.block.yml
     usrp_ble_tx_rx_triggle.block.yml
     usrp_ble_data_send.block.yml
     usrp_ble_data_store.block.yml

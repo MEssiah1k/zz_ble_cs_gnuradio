@@ -29,6 +29,7 @@ include(GrPybind)
 ########################################################################
 
 list(APPEND usrp_ble_python_files
+    capture_gate_python.cc
     tx_rx_triggle_python.cc
     data_send_python.cc
     data_store_python.cc

@@ -49,6 +49,30 @@ TX/RX phases. `freq_ctrl` is routed into a `Message Pair to Var` block that
 updates `hop_offset`; `centetr_fre` is then recalculated as
 `2.44e9 + hop_offset - tone_freq`.
 
+Continuous capture gate:
+
+- the flowgraph keeps the original `file sink`
+- a new OOT control block `capture_gate` is inserted before each `file sink`
+- `interact_center_rfhop` publishes a new `capture_ctrl` message port
+- `start_button` starts the RF-hop schedule and sends `capture_start`
+- `stop_button` or final hop completion sends `capture_stop`
+- the gate only lets samples through while capture is enabled
+- each direction is still recorded into one continuous file, instead of split files
+
+Continuous capture output files:
+
+```text
+1to1_rfhop/data_reflector_rx_from_initiator2
+1to1_rfhop/data_initiator_rx_from_reflector2
+```
+
+New post-processing scripts for the continuous format:
+
+```bash
+python3 analyze_continuous_capture.py --root 1to1_rfhop
+python3 estimate_distance_continuous.py --root 1to1_rfhop
+```
+
 Dry-run the schedule without touching hardware:
 
 ```bash

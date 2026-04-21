@@ -12,6 +12,7 @@
 include(GrPlatform) #define LIB_SUFFIX
 
 list(APPEND usrp_ble_sources
+    capture_gate_impl.cc
     tx_rx_triggle_impl.cc
     data_send_impl.cc
     data_store_impl.cc

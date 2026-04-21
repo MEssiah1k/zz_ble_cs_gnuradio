@@ -249,7 +249,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2240, 996.0]
+    coordinate: [2016, 1028.0]
     rotation: 0
     state: enabled
 - name: blocks_message_debug_0
@@ -294,7 +294,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1976, 752.0]
+    coordinate: [1640, 792.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0_0
@@ -310,7 +310,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1968, 888.0]
+    coordinate: [1632, 928.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0
@@ -328,7 +328,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [608, 736.0]
+    coordinate: [608, 704.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0_0
@@ -427,7 +427,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1928, 452.0]
+    coordinate: [1544, 324.0]
     rotation: 0
     state: disabled
 - name: qtgui_freq_sink_x_0_1_0
@@ -608,103 +608,6 @@ blocks:
     coordinate: [2224, 644.0]
     rotation: 0
     state: enabled
-- name: qtgui_time_sink_x_0_0
-  id: qtgui_time_sink_x
-  parameters:
-    affinity: ''
-    alias: ''
-    alpha1: '1.0'
-    alpha10: '1.0'
-    alpha2: '1.0'
-    alpha3: '1.0'
-    alpha4: '1.0'
-    alpha5: '1.0'
-    alpha6: '1.0'
-    alpha7: '1.0'
-    alpha8: '1.0'
-    alpha9: '1.0'
-    autoscale: 'False'
-    axislabels: 'True'
-    color1: blue
-    color10: dark blue
-    color2: red
-    color3: green
-    color4: black
-    color5: cyan
-    color6: magenta
-    color7: yellow
-    color8: dark red
-    color9: dark green
-    comment: ''
-    ctrlpanel: 'False'
-    entags: 'True'
-    grid: 'False'
-    gui_hint: ''
-    label1: Signal 1
-    label10: Signal 10
-    label2: Signal 2
-    label3: Signal 3
-    label4: Signal 4
-    label5: Signal 5
-    label6: Signal 6
-    label7: Signal 7
-    label8: Signal 8
-    label9: Signal 9
-    legend: 'True'
-    marker1: '-1'
-    marker10: '-1'
-    marker2: '-1'
-    marker3: '-1'
-    marker4: '-1'
-    marker5: '-1'
-    marker6: '-1'
-    marker7: '-1'
-    marker8: '-1'
-    marker9: '-1'
-    name: '""'
-    nconnections: '1'
-    size: '1024'
-    srate: samp_rate
-    stemplot: 'False'
-    style1: '1'
-    style10: '1'
-    style2: '1'
-    style3: '1'
-    style4: '1'
-    style5: '1'
-    style6: '1'
-    style7: '1'
-    style8: '1'
-    style9: '1'
-    tr_chan: '0'
-    tr_delay: '0'
-    tr_level: '0.0'
-    tr_mode: qtgui.TRIG_MODE_FREE
-    tr_slope: qtgui.TRIG_SLOPE_POS
-    tr_tag: '""'
-    type: complex
-    update_time: '0.10'
-    width1: '1'
-    width10: '1'
-    width2: '1'
-    width3: '1'
-    width4: '1'
-    width5: '1'
-    width6: '1'
-    width7: '1'
-    width8: '1'
-    width9: '1'
-    ylabel: Amplitude
-    ymax: '1'
-    ymin: '-1'
-    yunit: '""'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [2200, 1100.0]
-    rotation: 0
-    state: disabled
 - name: uhd_usrp_sink_0_0_0
   id: uhd_usrp_sink
   parameters:
@@ -1256,7 +1159,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [792, 708.0]
+    coordinate: [840, 676.0]
     rotation: 0
     state: enabled
 - name: uhd_usrp_source_0
@@ -2128,7 +2031,39 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1440, 404.0]
+    coordinate: [1192, 444.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_capture_gate_0
+  id: usrp_ble_capture_gate
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Gate reflector stream before file sink.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_channels: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2000, 496.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_capture_gate_0_0
+  id: usrp_ble_capture_gate
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Gate initiator stream before file sink.
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_channels: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1816, 1032.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_data_send_0
@@ -2178,9 +2113,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2248, 756.0]
+    coordinate: [2160, 812.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: usrp_ble_data_store_0_0
   id: usrp_ble_data_store
   parameters:
@@ -2194,9 +2129,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2240, 900.0]
+    coordinate: [2152, 900.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: usrp_ble_interact_center_rfhop_0
   id: usrp_ble_interact_center_rfhop
   parameters:
@@ -2235,7 +2170,7 @@ blocks:
     bus_structure: null
     coordinate: [464, 504.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: usrp_ble_random_phase_1
   id: usrp_ble_random_phase
   parameters:
@@ -2252,26 +2187,32 @@ blocks:
     bus_structure: null
     coordinate: [344, 616.0]
     rotation: 0
-    state: enabled
+    state: disabled
 
 connections:
-- [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_0, '0']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0, '1']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0_0, '1']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0, '0']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0_0, '0']
 - [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_1, '0']
 - [analog_sig_source_x_0_1_0, '0', qtgui_freq_sink_x_0_1_0, '0']
-- [blocks_multiply_conjugate_cc_0, '0', blocks_file_sink_0, '0']
 - [blocks_multiply_conjugate_cc_0, '0', qtgui_time_sink_x_0, '0']
+- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_0, '0']
 - [blocks_multiply_conjugate_cc_0, '0', usrp_ble_data_store_0, '0']
-- [blocks_multiply_conjugate_cc_0_0, '0', blocks_file_sink_0_0, '0']
-- [blocks_multiply_conjugate_cc_0_0, '0', qtgui_time_sink_x_0_0, '0']
+- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_0_0, '0']
 - [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_data_store_0_0, '0']
 - [blocks_multiply_xx_0, '0', uhd_usrp_sink_0_0_0_0, '0']
 - [blocks_multiply_xx_0_0, '0', uhd_usrp_sink_0_0_0_0, '1']
 - [uhd_usrp_source_0_0, '0', blocks_multiply_conjugate_cc_0_0, '0']
 - [uhd_usrp_source_0_0, '1', blocks_multiply_conjugate_cc_0, '0']
 - [uhd_usrp_source_0_0, '1', qtgui_freq_sink_x_0_1, '0']
+- [usrp_ble_capture_gate_0, '0', blocks_file_sink_0, '0']
+- [usrp_ble_capture_gate_0_0, '0', blocks_file_sink_0_0, '0']
 - [usrp_ble_data_send_0, '0', blocks_multiply_xx_0, '1']
 - [usrp_ble_data_send_0, '0', usrp_ble_interact_center_rfhop_0, '0']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_0, '1']
+- [usrp_ble_interact_center_rfhop_0, capture_ctrl, usrp_ble_capture_gate_0, command]
+- [usrp_ble_interact_center_rfhop_0, capture_ctrl, usrp_ble_capture_gate_0_0, command]
 - [usrp_ble_interact_center_rfhop_0, freq_ctrl, blocks_message_debug_0, print]
 - [usrp_ble_interact_center_rfhop_0, freq_ctrl, blocks_msgpair_to_var_hop_offset,
   inpair]

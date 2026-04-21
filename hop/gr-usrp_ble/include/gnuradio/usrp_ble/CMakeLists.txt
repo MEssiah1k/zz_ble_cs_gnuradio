@@ -11,6 +11,7 @@
 ########################################################################
 install(FILES
     api.h
+    capture_gate.h
     tx_rx_triggle.h
     data_send.h
     data_store.h

@@ -21,6 +21,7 @@ namespace py = pybind11;
 // Please do not delete
 /**************************************/
 // BINDING_FUNCTION_PROTOTYPES(
+    void bind_capture_gate(py::module& m);
     void bind_tx_rx_triggle(py::module& m);
     void bind_data_send(py::module& m);
     void bind_data_store(py::module& m);
@@ -59,6 +60,7 @@ PYBIND11_MODULE(usrp_ble_python, m)
     // Please do not delete
     /**************************************/
     // BINDING_FUNCTION_CALLS(
+    bind_capture_gate(m);
     bind_tx_rx_triggle(m);
     bind_data_send(m);
     bind_data_store(m);

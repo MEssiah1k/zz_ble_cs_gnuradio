@@ -70,6 +70,10 @@ outputs:
   domain: message
   id: store2_ctrl
   optional: 1
+- label: capture_ctrl
+  domain: message
+  id: capture_ctrl
+  optional: 1
 - label: freq_ctrl
   domain: message
   id: freq_ctrl
