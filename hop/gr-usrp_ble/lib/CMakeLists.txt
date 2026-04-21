@@ -16,8 +16,10 @@ list(APPEND usrp_ble_sources
     data_send_impl.cc
     data_store_impl.cc
     interact_center_impl.cc
+    interact_center_rfhop_impl.cc
     channel_phase_impl.cc
     random_phase_impl.cc
+    rx_burst_gate_impl.cc
     tx_burst_gate_impl.cc
     phase_clock_select_impl.cc
 )

@@ -4,14 +4,14 @@ options:
     catch_exceptions: 'True'
     category: '[GRC Hier Blocks]'
     cmake_opt: ''
-    comment: ''
+    comment: Low-rate RF center-frequency hopping, no TX/RX gate.
     copyright: ''
     description: ''
     gen_cmake: 'On'
     gen_linking: dynamic
     generate_options: qt_gui
     hier_block_src_path: '.:'
-    id: ble_cs_1to1
+    id: ble_cs_1to1_rfhop_nogate
     max_nouts: '0'
     output_language: python
     placement: (0,0)
@@ -22,7 +22,7 @@ options:
     run_options: prompt
     sizing_mode: fixed
     thread_safe_setters: ''
-    title: Not titled yet
+    title: BLE CS 1to1 RF-hop no-gate
     window_size: (1000,1000)
   states:
     bus_sink: false
@@ -37,7 +37,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: 2.44e9
+    value: 2.44e9 + hop_offset - tone_freq
   states:
     bus_sink: false
     bus_source: false
@@ -55,6 +55,19 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate: [1040, 24.0]
+    rotation: 0
+    state: enabled
+- name: hop_offset
+  id: variable
+  parameters:
+    comment: Updated from interact_center freq_ctrl; RF center = 2.44 GHz + hop_offset
+      - tone_freq
+    value: -40e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [824, 44.0]
     rotation: 0
     state: enabled
 - name: recv_gain
@@ -82,7 +95,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: 40e6
+    value: 1e6
   states:
     bus_sink: false
     bus_source: false
@@ -142,30 +155,19 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [712, 12.0]
+    coordinate: [688, 12.0]
     rotation: 0
     state: true
-- name: analog_sig_source_x_0
-  id: analog_sig_source_x
+- name: tone_freq
+  id: variable
   parameters:
-    affinity: ''
-    alias: ''
-    amp: '1'
-    comment: "\u72B6\u6001\u673A\u72EC\u7ACB\u65F6\u949F"
-    freq: '1000'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    offset: '0'
-    phase: '0'
-    samp_rate: samp_rate
-    showports: 'False'
-    type: complex
-    waveform: analog.GR_COS_WAVE
+    comment: Fixed low-rate baseband tone. RF tone = USRP center + tone_freq.
+    value: '0'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [8, 988.0]
+    coordinate: [1040, 80]
     rotation: 0
     state: enabled
 - name: analog_sig_source_x_0_1
@@ -175,7 +177,7 @@ blocks:
     alias: ''
     amp: '1'
     comment: ''
-    freq: -49e6
+    freq: tone_freq
     maxoutbuf: '0'
     minoutbuf: '0'
     offset: '0'
@@ -191,6 +193,65 @@ blocks:
     coordinate: [88, 460.0]
     rotation: 0
     state: enabled
+- name: analog_sig_source_x_0_1_0
+  id: analog_sig_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    amp: '1'
+    comment: ''
+    freq: hop_offset
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    offset: '0'
+    phase: '0'
+    samp_rate: 100e6
+    showports: 'True'
+    type: complex
+    waveform: analog.GR_COS_WAVE
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [232, 1204.0]
+    rotation: 0
+    state: enabled
+- name: blocks_file_sink_0
+  id: blocks_file_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    append: 'False'
+    comment: ''
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator2
+    type: complex
+    unbuffered: 'False'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2232, 492.0]
+    rotation: 0
+    state: enabled
+- name: blocks_file_sink_0_0
+  id: blocks_file_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    append: 'False'
+    comment: ''
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector2
+    type: complex
+    unbuffered: 'False'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2240, 996.0]
+    rotation: 0
+    state: enabled
 - name: blocks_message_debug_0
   id: blocks_message_debug
   parameters:
@@ -203,7 +264,21 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [960, 1136.0]
+    coordinate: [968, 1152.0]
+    rotation: 0
+    state: enabled
+- name: blocks_msgpair_to_var_hop_offset
+  id: blocks_msgpair_to_var
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    target: hop_offset
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [960, 1068.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0
@@ -219,7 +294,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2376, 784.0]
+    coordinate: [1976, 752.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0_0
@@ -235,7 +310,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2368, 920.0]
+    coordinate: [1968, 888.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0
@@ -253,7 +328,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [560, 736.0]
+    coordinate: [608, 736.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0_0
@@ -274,108 +349,6 @@ blocks:
     coordinate: [560, 816.0]
     rotation: 0
     state: enabled
-- name: blocks_throttle_clock
-  id: blocks_throttle2
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: "\u72B6\u6001\u673A\u65F6\u949F\u9650\u901F"
-    ignoretag: 'True'
-    limit: auto
-    maximum: '0.1'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    samples_per_second: samp_rate
-    type: complex
-    vlen: '1'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [256, 1024.0]
-    rotation: 0
-    state: enabled
-- name: qtgui_freq_sink_x_0_0
-  id: qtgui_freq_sink_x
-  parameters:
-    affinity: ''
-    alias: ''
-    alpha1: '1.0'
-    alpha10: '1.0'
-    alpha2: '1.0'
-    alpha3: '1.0'
-    alpha4: '1.0'
-    alpha5: '1.0'
-    alpha6: '1.0'
-    alpha7: '1.0'
-    alpha8: '1.0'
-    alpha9: '1.0'
-    autoscale: 'False'
-    average: '1.0'
-    axislabels: 'True'
-    bw: samp_rate/display_decim
-    color1: '"blue"'
-    color10: '"dark blue"'
-    color2: '"red"'
-    color3: '"green"'
-    color4: '"black"'
-    color5: '"cyan"'
-    color6: '"magenta"'
-    color7: '"yellow"'
-    color8: '"dark red"'
-    color9: '"dark green"'
-    comment: ''
-    ctrlpanel: 'False'
-    fc: '0'
-    fftsize: '8192'
-    freqhalf: 'True'
-    grid: 'False'
-    gui_hint: ''
-    label: Relative Gain
-    label1: ''
-    label10: ''''''
-    label2: ''''''
-    label3: ''''''
-    label4: ''''''
-    label5: ''''''
-    label6: ''''''
-    label7: ''''''
-    label8: ''''''
-    label9: ''''''
-    legend: 'True'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    name: '"tx"'
-    nconnections: '1'
-    norm_window: 'False'
-    showports: 'False'
-    tr_chan: '0'
-    tr_level: '0.0'
-    tr_mode: qtgui.TRIG_MODE_FREE
-    tr_tag: '""'
-    type: complex
-    units: dB
-    update_time: '0.10'
-    width1: '1'
-    width10: '1'
-    width2: '1'
-    width3: '1'
-    width4: '1'
-    width5: '1'
-    width6: '1'
-    width7: '1'
-    width8: '1'
-    width9: '1'
-    wintype: window.WIN_BLACKMAN_hARRIS
-    ymax: '10'
-    ymin: '-140'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [1192, 532.0]
-    rotation: 0
-    state: disabled
 - name: qtgui_freq_sink_x_0_1
   id: qtgui_freq_sink_x
   parameters:
@@ -454,9 +427,90 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2424, 628.0]
+    coordinate: [1928, 452.0]
     rotation: 0
     state: disabled
+- name: qtgui_freq_sink_x_0_1_0
+  id: qtgui_freq_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'False'
+    average: '1.0'
+    axislabels: 'True'
+    bw: 100e6
+    color1: '"blue"'
+    color10: '"dark blue"'
+    color2: '"red"'
+    color3: '"green"'
+    color4: '"black"'
+    color5: '"cyan"'
+    color6: '"magenta"'
+    color7: '"yellow"'
+    color8: '"dark red"'
+    color9: '"dark green"'
+    comment: ''
+    ctrlpanel: 'False'
+    fc: '0'
+    fftsize: '8192'
+    freqhalf: 'True'
+    grid: 'False'
+    gui_hint: ''
+    label: Relative Gain
+    label1: ''
+    label10: ''''''
+    label2: ''''''
+    label3: ''''''
+    label4: ''''''
+    label5: ''''''
+    label6: ''''''
+    label7: ''''''
+    label8: ''''''
+    label9: ''''''
+    legend: 'True'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '"rx_gate"'
+    nconnections: '1'
+    norm_window: 'False'
+    showports: 'False'
+    tr_chan: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_tag: '""'
+    type: complex
+    units: dB
+    update_time: '0.10'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    wintype: window.WIN_BLACKMAN_hARRIS
+    ymax: '10'
+    ymin: '-140'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [520, 1220.0]
+    rotation: 0
+    state: enabled
 - name: qtgui_time_sink_x_0
   id: qtgui_time_sink_x
   parameters:
@@ -551,7 +605,104 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2424, 508.0]
+    coordinate: [2224, 644.0]
+    rotation: 0
+    state: enabled
+- name: qtgui_time_sink_x_0_0
+  id: qtgui_time_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'False'
+    axislabels: 'True'
+    color1: blue
+    color10: dark blue
+    color2: red
+    color3: green
+    color4: black
+    color5: cyan
+    color6: magenta
+    color7: yellow
+    color8: dark red
+    color9: dark green
+    comment: ''
+    ctrlpanel: 'False'
+    entags: 'True'
+    grid: 'False'
+    gui_hint: ''
+    label1: Signal 1
+    label10: Signal 10
+    label2: Signal 2
+    label3: Signal 3
+    label4: Signal 4
+    label5: Signal 5
+    label6: Signal 6
+    label7: Signal 7
+    label8: Signal 8
+    label9: Signal 9
+    legend: 'True'
+    marker1: '-1'
+    marker10: '-1'
+    marker2: '-1'
+    marker3: '-1'
+    marker4: '-1'
+    marker5: '-1'
+    marker6: '-1'
+    marker7: '-1'
+    marker8: '-1'
+    marker9: '-1'
+    name: '""'
+    nconnections: '1'
+    size: '1024'
+    srate: samp_rate
+    stemplot: 'False'
+    style1: '1'
+    style10: '1'
+    style2: '1'
+    style3: '1'
+    style4: '1'
+    style5: '1'
+    style6: '1'
+    style7: '1'
+    style8: '1'
+    style9: '1'
+    tr_chan: '0'
+    tr_delay: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: complex
+    update_time: '0.10'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    ylabel: Amplitude
+    ymax: '1'
+    ymin: '-1'
+    yunit: '""'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2200, 1100.0]
     rotation: 0
     state: disabled
 - name: uhd_usrp_sink_0_0_0
@@ -591,7 +742,7 @@ blocks:
     ant7: TX/RX
     ant8: TX/RX
     ant9: TX/RX
-    bw0: 100e6
+    bw0: 5e6
     bw1: '0'
     bw10: '0'
     bw11: '0'
@@ -828,7 +979,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1008, 256.0]
+    coordinate: [840, 220.0]
     rotation: 0
     state: disabled
 - name: uhd_usrp_sink_0_0_0_0
@@ -868,8 +1019,8 @@ blocks:
     ant7: TX/RX
     ant8: TX/RX
     ant9: TX/RX
-    bw0: 100e6
-    bw1: 100e6
+    bw0: samp_rate
+    bw1: samp_rate
     bw10: '0'
     bw11: '0'
     bw12: '0'
@@ -1105,7 +1256,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1144, 660.0]
+    coordinate: [792, 708.0]
     rotation: 0
     state: enabled
 - name: uhd_usrp_source_0
@@ -1541,7 +1692,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1288, 248.0]
+    coordinate: [1176, 220.0]
     rotation: 0
     state: disabled
 - name: uhd_usrp_source_0_0
@@ -1581,8 +1732,8 @@ blocks:
     ant7: '"RX2"'
     ant8: '"RX2"'
     ant9: '"RX2"'
-    bw0: 100e6
-    bw1: 100e6
+    bw0: samp_rate
+    bw1: samp_rate
     bw10: '0'
     bw11: '0'
     bw12: '0'
@@ -1977,7 +2128,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1504, 644.0]
+    coordinate: [1440, 404.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_data_send_0
@@ -2020,14 +2171,14 @@ blocks:
     affinity: ''
     alias: ''
     comment: ''
-    data_len: '200'
-    path: /home/ubuntu/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator
-    skip_len: '50000'
+    data_len: '2000'
+    path: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator
+    skip_len: '2500'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2640, 796.0]
+    coordinate: [2248, 756.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_data_store_0_0
@@ -2036,18 +2187,18 @@ blocks:
     affinity: ''
     alias: ''
     comment: ''
-    data_len: '200'
-    path: /home/ubuntu/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector
-    skip_len: '50000'
+    data_len: '2000'
+    path: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector
+    skip_len: '2500'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2632, 932.0]
+    coordinate: [2240, 900.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_interact_center_0
-  id: usrp_ble_interact_center
+- name: usrp_ble_interact_center_rfhop_0
+  id: usrp_ble_interact_center_rfhop
   parameters:
     affinity: ''
     alias: ''
@@ -2056,6 +2207,7 @@ blocks:
     minoutbuf: '0'
     repeat_total: '3'
     sample_rate: int(samp_rate)
+    settle_time_ms: '5'
     start_btn: start_button
     stop_btn: stop_button
     use_msg_clock: 'False'
@@ -2081,7 +2233,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [344, 512.0]
+    coordinate: [464, 504.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_random_phase_1
@@ -2101,79 +2253,38 @@ blocks:
     coordinate: [344, 616.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_rx_burst_gate_0
-  id: usrp_ble_rx_burst_gate
-  parameters:
-    affinity: ''
-    alias: ''
-    burst_len: '100000'
-    comment: ''
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    num_channels: '2'
-    skip_len: '10000'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [1952, 760.0]
-    rotation: 0
-    state: enabled
-- name: usrp_ble_tx_burst_gate_0
-  id: usrp_ble_tx_burst_gate
-  parameters:
-    add_uhd_tags: 'True'
-    affinity: ''
-    alias: ''
-    burst_len: '10000'
-    comment: ''
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    num_channels: '2'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [800, 760.0]
-    rotation: 0
-    state: enabled
 
 connections:
-- [analog_sig_source_x_0, '0', blocks_throttle_clock, '0']
 - [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_0, '0']
 - [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_1, '0']
+- [analog_sig_source_x_0_1_0, '0', qtgui_freq_sink_x_0_1_0, '0']
+- [blocks_multiply_conjugate_cc_0, '0', blocks_file_sink_0, '0']
 - [blocks_multiply_conjugate_cc_0, '0', qtgui_time_sink_x_0, '0']
 - [blocks_multiply_conjugate_cc_0, '0', usrp_ble_data_store_0, '0']
+- [blocks_multiply_conjugate_cc_0_0, '0', blocks_file_sink_0_0, '0']
+- [blocks_multiply_conjugate_cc_0_0, '0', qtgui_time_sink_x_0_0, '0']
 - [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_data_store_0_0, '0']
-- [blocks_multiply_xx_0, '0', usrp_ble_tx_burst_gate_0, '0']
-- [blocks_multiply_xx_0_0, '0', usrp_ble_tx_burst_gate_0, '1']
-- [blocks_throttle_clock, '0', usrp_ble_interact_center_0, '0']
-- [uhd_usrp_source_0_0, '0', usrp_ble_rx_burst_gate_0, '0']
-- [uhd_usrp_source_0_0, '1', usrp_ble_rx_burst_gate_0, '1']
+- [blocks_multiply_xx_0, '0', uhd_usrp_sink_0_0_0_0, '0']
+- [blocks_multiply_xx_0_0, '0', uhd_usrp_sink_0_0_0_0, '1']
+- [uhd_usrp_source_0_0, '0', blocks_multiply_conjugate_cc_0_0, '0']
+- [uhd_usrp_source_0_0, '1', blocks_multiply_conjugate_cc_0, '0']
+- [uhd_usrp_source_0_0, '1', qtgui_freq_sink_x_0_1, '0']
 - [usrp_ble_data_send_0, '0', blocks_multiply_xx_0, '1']
+- [usrp_ble_data_send_0, '0', usrp_ble_interact_center_rfhop_0, '0']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_0, '1']
-- [usrp_ble_interact_center_0, freq_ctrl, analog_sig_source_x_0_1, cmd]
-- [usrp_ble_interact_center_0, freq_ctrl, blocks_message_debug_0, print]
-- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_random_phase_0, freq]
-- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_random_phase_1, freq]
-- [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_data_send_0, command]
-- [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_tx_burst_gate_0, command]
-- [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_data_send_0_0, command]
-- [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_tx_burst_gate_0, command]
-- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_0, command]
-- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_rx_burst_gate_0, command]
-- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_0_0, command]
-- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_rx_burst_gate_0, command]
+- [usrp_ble_interact_center_rfhop_0, freq_ctrl, blocks_message_debug_0, print]
+- [usrp_ble_interact_center_rfhop_0, freq_ctrl, blocks_msgpair_to_var_hop_offset,
+  inpair]
+- [usrp_ble_interact_center_rfhop_0, freq_ctrl, usrp_ble_random_phase_0, freq]
+- [usrp_ble_interact_center_rfhop_0, freq_ctrl, usrp_ble_random_phase_1, freq]
+- [usrp_ble_interact_center_rfhop_0, send1_ctrl, usrp_ble_data_send_0, command]
+- [usrp_ble_interact_center_rfhop_0, send2_ctrl, usrp_ble_data_send_0_0, command]
+- [usrp_ble_interact_center_rfhop_0, store1_ctrl, usrp_ble_data_store_0, command]
+- [usrp_ble_interact_center_rfhop_0, store2_ctrl, usrp_ble_data_store_0_0, command]
 - [usrp_ble_random_phase_0, '0', blocks_multiply_conjugate_cc_0_0, '1']
 - [usrp_ble_random_phase_0, '0', blocks_multiply_xx_0, '0']
 - [usrp_ble_random_phase_1, '0', blocks_multiply_conjugate_cc_0, '1']
 - [usrp_ble_random_phase_1, '0', blocks_multiply_xx_0_0, '0']
-- [usrp_ble_rx_burst_gate_0, '0', blocks_multiply_conjugate_cc_0_0, '0']
-- [usrp_ble_rx_burst_gate_0, '1', blocks_multiply_conjugate_cc_0, '0']
-- [usrp_ble_rx_burst_gate_0, '1', qtgui_freq_sink_x_0_1, '0']
-- [usrp_ble_tx_burst_gate_0, '0', qtgui_freq_sink_x_0_0, '0']
-- [usrp_ble_tx_burst_gate_0, '0', uhd_usrp_sink_0_0_0_0, '0']
-- [usrp_ble_tx_burst_gate_0, '1', uhd_usrp_sink_0_0_0_0, '1']
 
 metadata:
   file_format: 1

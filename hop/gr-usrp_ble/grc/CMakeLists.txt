@@ -11,8 +11,10 @@ install(FILES
     usrp_ble_data_send.block.yml
     usrp_ble_data_store.block.yml
     usrp_ble_interact_center.block.yml
+    usrp_ble_interact_center_rfhop.block.yml
     usrp_ble_channel_phase.block.yml
     usrp_ble_random_phase.block.yml
+    usrp_ble_rx_burst_gate.block.yml
     usrp_ble_tx_burst_gate.block.yml
     usrp_ble_tx_burst_gate_1to2.block.yml
     usrp_ble_phase_clock_select.block.yml DESTINATION share/gnuradio/grc/blocks

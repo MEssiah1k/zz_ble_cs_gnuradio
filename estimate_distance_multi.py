@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 
 
-PROJECT_ROOT = Path("/home/mess1ah/zz_ble_cs_gnuradio")
+PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "self_2"
 DIR_INITIATOR_RX = "data_initiator_rx_from_reflectors"
 REFLECTOR_DIRS = {

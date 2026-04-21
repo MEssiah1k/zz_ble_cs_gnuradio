@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-PROJECT_ROOT = Path("/home/mess1ah/zz_ble_cs_gnuradio")
+PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "self"
 PAIR_MAPPINGS = {
     "reflector": (
@@ -45,7 +45,7 @@ def list_bin_files(dir_path: Path) -> list[Path]:
 
 
 def filter_bin_files(files: list[Path], first_repeat_only: bool) -> list[Path]:
-    """默认只画每个频点的第一次测量，减少重复出图耗时。"""
+    """按需只保留每个频点的第一次测量。"""
     if not first_repeat_only:
         return files
 
@@ -101,16 +101,20 @@ def load_gr_complex_bin(path: Path) -> np.ndarray:
     return np.fromfile(path, dtype=np.complex64)
 
 
-def select_window(x: np.ndarray, max_points: int) -> tuple[np.ndarray, np.ndarray]:
-    """默认选择文件中间窗口，避免总是画到头部零段。"""
-    n = min(x.size, max_points)
+def select_window(x: np.ndarray, max_points: int | None) -> tuple[np.ndarray, np.ndarray]:
+    """max_points 为空或非正数时绘制全部样本。"""
+    if max_points is None or max_points <= 0 or max_points >= x.size:
+        idx = np.arange(x.size)
+        return x, idx
+
+    n = max_points
     start = max((x.size - n) // 2, 0)
     end = start + n
     idx = np.arange(start, end)
     return x[start:end], idx
 
 
-def plot_time_iq(x: np.ndarray, save_path: Path, max_points: int) -> None:
+def plot_time_iq(x: np.ndarray, save_path: Path, max_points: int | None) -> None:
     window, idx = select_window(x, max_points)
     plt.figure(figsize=(10, 4))
     plt.plot(idx, np.real(window), label="I", linewidth=1.0)
@@ -125,7 +129,7 @@ def plot_time_iq(x: np.ndarray, save_path: Path, max_points: int) -> None:
     plt.close()
 
 
-def plot_amplitude_phase(x: np.ndarray, save_prefix: Path, max_points: int) -> None:
+def plot_amplitude_phase(x: np.ndarray, save_prefix: Path, max_points: int | None) -> None:
     window, idx = select_window(x, max_points)
     amp = np.abs(window)
     phase = np.angle(window)
@@ -162,7 +166,7 @@ def plot_amplitude_phase(x: np.ndarray, save_prefix: Path, max_points: int) -> N
     plt.close()
 
 
-def plot_constellation(x: np.ndarray, save_path: Path, max_points: int) -> None:
+def plot_constellation(x: np.ndarray, save_path: Path, max_points: int | None) -> None:
     window, _ = select_window(x, max_points)
     plt.figure(figsize=(5, 5))
     plt.scatter(np.real(window), np.imag(window), s=4, alpha=0.5)
@@ -176,7 +180,7 @@ def plot_constellation(x: np.ndarray, save_path: Path, max_points: int) -> None:
     plt.close()
 
 
-def plot_file(file_path: Path, output_base: Path, max_points: int) -> None:
+def plot_file(file_path: Path, output_base: Path, max_points: int | None, all_plots: bool) -> None:
     x = load_gr_complex_bin(file_path)
     tokens = parse_file_tokens(file_path)
     if tokens["freq_index"] is not None and tokens["repeat_index"] is not None:
@@ -189,9 +193,10 @@ def plot_file(file_path: Path, output_base: Path, max_points: int) -> None:
     else:
         target_dir = output_base / file_path.parent.name / file_path.stem
     target_dir.mkdir(parents=True, exist_ok=True)
-    plot_time_iq(x, target_dir / f"{file_path.stem}_iq.png", max_points)
-    plot_amplitude_phase(x, target_dir / file_path.stem, max_points)
     plot_constellation(x, target_dir / f"{file_path.stem}_constellation.png", max_points)
+    if all_plots:
+        plot_time_iq(x, target_dir / f"{file_path.stem}_iq.png", max_points)
+        plot_amplitude_phase(x, target_dir / file_path.stem, max_points)
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -211,13 +216,18 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-points",
         type=int,
-        default=4000,
-        help="每张图最多绘制多少个样本点",
+        default=0,
+        help="每张图最多绘制多少个样本点；默认 0 表示绘制全部样本",
     )
     parser.add_argument(
-        "--all-repeats",
+        "--all-plots",
         action="store_true",
-        help="画出所有重复测量；默认只画每个频点的第一次测量 r00",
+        help="同时生成 IQ、幅度、相位、解包相位图；默认只生成星座图",
+    )
+    parser.add_argument(
+        "--first-repeat-only",
+        action="store_true",
+        help="只画每个频点的第一次测量 r00；默认画出所有重复测量",
     )
     return parser
 
@@ -238,10 +248,15 @@ def main() -> None:
         print(f"== plot directory: {dir_path} ==")
         files = filter_bin_files(
             list_bin_files(dir_path),
-            first_repeat_only=not args.all_repeats,
+            first_repeat_only=args.first_repeat_only,
         )
         for file_path in files:
-            plot_file(file_path, args.output_dir / args.root.name, args.max_points)
+            plot_file(
+                file_path,
+                args.output_dir / args.root.name,
+                args.max_points,
+                args.all_plots,
+            )
             print(file_path.name)
 
 

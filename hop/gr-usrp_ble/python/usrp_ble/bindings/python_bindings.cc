@@ -25,8 +25,10 @@ namespace py = pybind11;
     void bind_data_send(py::module& m);
     void bind_data_store(py::module& m);
     void bind_interact_center(py::module& m);
+    void bind_interact_center_rfhop(py::module& m);
     void bind_channel_phase(py::module& m);
     void bind_random_phase(py::module& m);
+    void bind_rx_burst_gate(py::module& m);
     void bind_tx_burst_gate(py::module& m);
     void bind_phase_clock_select(py::module& m);
 // ) END BINDING_FUNCTION_PROTOTYPES
@@ -61,8 +63,10 @@ PYBIND11_MODULE(usrp_ble_python, m)
     bind_data_send(m);
     bind_data_store(m);
     bind_interact_center(m);
+    bind_interact_center_rfhop(m);
     bind_channel_phase(m);
     bind_random_phase(m);
+    bind_rx_burst_gate(m);
     bind_tx_burst_gate(m);
     bind_phase_clock_select(m);
     // ) END BINDING_FUNCTION_CALLS

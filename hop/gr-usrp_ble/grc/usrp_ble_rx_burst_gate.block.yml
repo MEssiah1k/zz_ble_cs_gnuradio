@@ -1,0 +1,47 @@
+id: usrp_ble_rx_burst_gate
+label: rx_burst_gate
+category: '[usrp_ble]'
+
+templates:
+  imports: from gnuradio import usrp_ble
+  make: usrp_ble.rx_burst_gate(${num_channels}, ${burst_len}, ${skip_len})
+  callbacks:
+  - set_burst_len(${burst_len})
+  - set_skip_len(${skip_len})
+
+parameters:
+- id: num_channels
+  label: Num Channels
+  dtype: int
+  default: '2'
+- id: burst_len
+  label: Burst Length
+  dtype: int
+  default: '100000'
+- id: skip_len
+  label: Skip Length
+  dtype: int
+  default: '10000'
+
+inputs:
+- label: in0
+  domain: stream
+  dtype: complex
+- label: in1
+  domain: stream
+  dtype: complex
+  optional: true
+- label: command
+  domain: message
+  id: command
+
+outputs:
+- label: out0
+  domain: stream
+  dtype: complex
+- label: out1
+  domain: stream
+  dtype: complex
+  optional: true
+
+file_format: 1

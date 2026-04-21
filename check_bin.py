@@ -13,7 +13,7 @@ import numpy as np
 
 
 BYTES_PER_GR_COMPLEX = 8
-PROJECT_ROOT = Path("/home/mess1ah/zz_ble_cs_gnuradio")
+PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "self"
 PAIR_MAPPINGS = {
     "reflector": (
@@ -27,6 +27,9 @@ PAIR_MAPPINGS = {
 }
 NEW_STYLE_RE = re.compile(r"^data_f(?P<freq>\d+)_r(?P<repeat>\d+)$")
 OLD_STYLE_RE = re.compile(r"^data_(?P<index>\d+)$")
+STABLE_MIN_COHERENCE = 0.75
+STABLE_PHASE_STD_MAX_RAD = 0.45
+STABLE_PHASE_P95_MAX_RAD = 0.70
 
 
 def discover_data_dirs(root: Path) -> list[Path]:
@@ -118,6 +121,60 @@ def validate_bin_layout(path: Path) -> dict[str, Any]:
     return result
 
 
+def phase_cluster_stats(x: np.ndarray) -> dict[str, float]:
+    result = {
+        "coherence": 0.0,
+        "cluster_phase_std": 0.0,
+        "cluster_phase_p95_abs": 0.0,
+        "cluster_phase_max_abs": 0.0,
+    }
+    if x.size == 0:
+        return result
+
+    finite_mask = np.isfinite(x.real) & np.isfinite(x.imag)
+    finite = x[finite_mask]
+    if finite.size == 0:
+        return result
+
+    amp = np.abs(finite)
+    active = finite[amp > 1e-12]
+    if active.size == 0:
+        return result
+
+    normalized = active / np.abs(active)
+    mean_dir = np.mean(normalized)
+    coherent = float(np.abs(mean_dir))
+    if coherent <= 1e-12:
+        phase_error = np.angle(normalized)
+    else:
+        phase_center = mean_dir / abs(mean_dir)
+        phase_error = np.angle(normalized * np.conj(phase_center))
+
+    result.update(
+        {
+            "coherence": coherent,
+            "cluster_phase_std": float(np.std(phase_error)),
+            "cluster_phase_p95_abs": float(np.percentile(np.abs(phase_error), 95)),
+            "cluster_phase_max_abs": float(np.max(np.abs(phase_error))),
+        }
+    )
+    return result
+
+
+def circular_phase_spread_rad(phases: list[float]) -> float:
+    if len(phases) <= 1:
+        return 0.0
+
+    values = np.exp(1j * np.array(phases, dtype=float))
+    center = np.mean(values)
+    if abs(center) <= 1e-12:
+        return float(np.pi)
+
+    phase_center = center / abs(center)
+    errors = np.angle(values * np.conj(phase_center))
+    return float(np.max(errors) - np.min(errors))
+
+
 def classify_signal(x: np.ndarray) -> str:
     if x.size == 0:
         return "empty"
@@ -126,9 +183,12 @@ def classify_signal(x: np.ndarray) -> str:
     if mean_abs < 1e-9:
         return "all_zero_or_invalid"
 
-    normalized = x / (amp + 1e-12)
-    coherent = float(np.abs(np.mean(normalized)))
-    if coherent > 0.98:
+    cluster = phase_cluster_stats(x)
+    if (
+        cluster["coherence"] >= STABLE_MIN_COHERENCE
+        and cluster["cluster_phase_std"] <= STABLE_PHASE_STD_MAX_RAD
+        and cluster["cluster_phase_p95_abs"] <= STABLE_PHASE_P95_MAX_RAD
+    ):
         return "stable_cluster"
 
     phase = np.unwrap(np.angle(x))
@@ -171,6 +231,7 @@ def summarize_complex_signal(x: np.ndarray) -> dict[str, Any]:
             "mean_phase": float(np.angle(np.mean(x))) if np.any(amp > 1e-12) else 0.0,
             "phase_std": float(np.std(phase)),
             "classification": classify_signal(x),
+            **phase_cluster_stats(x),
         }
     )
     return summary
@@ -259,6 +320,10 @@ def scan_directory(dir_path: Path, outlier_mad_scale: float) -> list[dict[str, A
                     "mean_power": summary["mean_power"],
                     "mean_phase": summary["mean_phase"],
                     "phase_std": summary["phase_std"],
+                    "coherence": summary["coherence"],
+                    "cluster_phase_std": summary["cluster_phase_std"],
+                    "cluster_phase_p95_abs": summary["cluster_phase_p95_abs"],
+                    "cluster_phase_max_abs": summary["cluster_phase_max_abs"],
                     "classification": summary["classification"],
                     **robust_summary,
                 }
@@ -326,12 +391,13 @@ def print_pair_report(records: list[dict[str, Any]]) -> None:
 
 
 def summarize_reports(all_reports: dict[str, Any]) -> dict[str, Any]:
-    """汇总所有 data_* 目录里的文件数量、复数采样点数量和空文件数量。"""
+    """汇总所有 data_* 目录里的文件数量、复数采样点数量和有效候选数量。"""
     total_files = 0
     total_iq_samples = 0
     empty_files = 0
     all_zero_files = 0
     bad_files = 0
+    classification_files: dict[str, int] = {}
 
     for records in all_reports["directories"].values():
         total_files += len(records)
@@ -348,6 +414,10 @@ def summarize_reports(all_reports: dict[str, Any]) -> dict[str, Any]:
         )
         bad_files += int(sum(1 for row in records if not row.get("ok", False)))
 
+        for row in records:
+            classification = str(row.get("classification") or "unknown")
+            classification_files[classification] = classification_files.get(classification, 0) + 1
+
     return {
         "summary": "total",
         "files": total_files,
@@ -355,7 +425,74 @@ def summarize_reports(all_reports: dict[str, Any]) -> dict[str, Any]:
         "empty_files": empty_files,
         "all_zero_files": all_zero_files,
         "bad_files": bad_files,
+        "classification_files": classification_files,
     }
+
+
+def parse_classifications(value: str) -> set[str]:
+    if not value:
+        return set()
+    return {item.strip() for item in value.split(",") if item.strip()}
+
+
+def collect_qualified_freq_indices(
+    all_reports: dict[str, Any],
+    valid_classifications: set[str],
+    min_robust_abs: float,
+    min_valid_repeats: int,
+    max_repeat_abs_spread: float,
+    max_repeat_phase_spread_rad: float,
+) -> list[int]:
+    """返回同时满足两侧要求的公共频点号。"""
+    required_dirs = {
+        "data_initiator_rx_from_reflector",
+        "data_reflector_rx_from_initiator",
+    }
+
+    per_dir_valid_rows: dict[str, dict[int, list[dict[str, Any]]]] = {}
+    for dir_name, records in all_reports["directories"].items():
+        if dir_name not in required_dirs:
+            continue
+
+        by_freq: dict[int, list[dict[str, Any]]] = {}
+        for row in records:
+            freq_index = row.get("freq_index")
+            if freq_index is None:
+                continue
+            if not row.get("ok", False):
+                continue
+
+            classification = str(row.get("classification") or "")
+            if valid_classifications and classification not in valid_classifications:
+                continue
+
+            robust_abs = float(row.get("robust_mean_abs", 0.0))
+            if robust_abs < min_robust_abs:
+                continue
+
+            by_freq.setdefault(int(freq_index), []).append(row)
+        per_dir_valid_rows[dir_name] = by_freq
+
+    if len(per_dir_valid_rows) < 2:
+        return []
+
+    valid_sets: list[set[int]] = []
+    for by_freq in per_dir_valid_rows.values():
+        valid_freqs: set[int] = set()
+        for freq_index, rows in by_freq.items():
+            if len(rows) < min_valid_repeats:
+                continue
+            abs_values = [float(row.get("robust_mean_abs", 0.0)) for row in rows]
+            if max(abs_values) - min(abs_values) > max_repeat_abs_spread:
+                continue
+            phases = [float(row.get("robust_mean_phase", 0.0)) for row in rows]
+            if circular_phase_spread_rad(phases) > max_repeat_phase_spread_rad:
+                continue
+            valid_freqs.add(freq_index)
+        valid_sets.append(valid_freqs)
+
+    common = set.intersection(*valid_sets) if valid_sets else set()
+    return sorted(common)
 
 
 def save_json(data: Any, path: Path) -> None:
@@ -383,6 +520,36 @@ def build_argument_parser() -> argparse.ArgumentParser:
         type=float,
         default=8.0,
         help="IQ 离群点半径阈值系数，阈值 = median(radius) + scale * MAD(radius)",
+    )
+    parser.add_argument(
+        "--qualified-classifications",
+        type=str,
+        default="stable_cluster",
+        help="满足要求的分类集合，逗号分隔；空字符串表示不过滤分类",
+    )
+    parser.add_argument(
+        "--qualified-min-robust-abs",
+        type=float,
+        default=0.8,
+        help="满足要求时单次记录的 robust_mean_abs 下限",
+    )
+    parser.add_argument(
+        "--qualified-min-valid-repeats",
+        type=int,
+        default=2,
+        help="满足要求时每个方向每个频点至少需要多少次有效重复",
+    )
+    parser.add_argument(
+        "--qualified-max-repeat-abs-spread",
+        type=float,
+        default=0.2,
+        help="满足要求时同一方向同一频点的有效重复 robust_mean_abs 最大差值上限",
+    )
+    parser.add_argument(
+        "--qualified-max-repeat-phase-spread",
+        type=float,
+        default=0.7,
+        help="满足要求时同一方向同一频点的有效重复 robust_mean_phase 最大角度散布上限，单位 rad",
     )
     return parser
 
@@ -412,6 +579,26 @@ def main() -> None:
         if rx_dir.exists() and ref_dir.exists():
             all_reports["pairs"][rx_name] = check_pair(rx_dir, ref_dir)
 
+    summary = summarize_reports(all_reports)
+    qualified_classifications = parse_classifications(args.qualified_classifications)
+    qualified_freq_indices = collect_qualified_freq_indices(
+        all_reports,
+        qualified_classifications,
+        args.qualified_min_robust_abs,
+        args.qualified_min_valid_repeats,
+        args.qualified_max_repeat_abs_spread,
+        args.qualified_max_repeat_phase_spread,
+    )
+    summary["qualified_criteria"] = {
+        "classifications": sorted(qualified_classifications),
+        "min_robust_abs": float(args.qualified_min_robust_abs),
+        "min_valid_repeats": int(args.qualified_min_valid_repeats),
+        "max_repeat_abs_spread": float(args.qualified_max_repeat_abs_spread),
+        "max_repeat_phase_spread_rad": float(args.qualified_max_repeat_phase_spread),
+    }
+    summary["qualified_freq_indices"] = qualified_freq_indices
+    all_reports["summary"] = summary
+
     print(f"== root: {args.root} ==")
     for name, records in all_reports["directories"].items():
         print(f"== directory: {name} ==")
@@ -420,9 +607,11 @@ def main() -> None:
         print(f"== pair: {name} ==")
         print_pair_report(records)
 
-    summary = summarize_reports(all_reports)
-    all_reports["summary"] = summary
     print(json.dumps(summary, ensure_ascii=False))
+    if qualified_freq_indices:
+        print("qualified_freq_indices: " + ",".join(str(v) for v in qualified_freq_indices))
+    else:
+        print("qualified_freq_indices: (none)")
 
     if args.save_json:
         save_json(all_reports, args.output_dir / args.root.name / "full_summary.json")

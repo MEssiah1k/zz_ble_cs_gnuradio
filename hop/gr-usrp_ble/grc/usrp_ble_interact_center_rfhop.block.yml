@@ -1,0 +1,82 @@
+id: usrp_ble_interact_center_rfhop
+label: interact_center_rfhop
+category: '[usrp_ble]'
+
+templates:
+  imports: from gnuradio import usrp_ble
+  make: |-
+    usrp_ble.interact_center_rfhop(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${settle_time_ms}, ${repeat_total})
+    self.${id}.set_use_msg_clock(${use_msg_clock})
+  callbacks:
+  - set_start_btn(${start_btn})
+  - set_stop_btn(${stop_btn})
+  - set_wait_time_ms(${wait_time_ms})
+  - set_settle_time_ms(${settle_time_ms})
+  - set_use_msg_clock(${use_msg_clock})
+
+parameters:
+- id: sample_rate
+  label: Sample Rate
+  dtype: int
+  default: 1000000
+- id: start_btn
+  label: Start
+  dtype: int
+  default: 0
+- id: stop_btn
+  label: Stop
+  dtype: int
+  default: 0
+- id: wait_time_ms
+  label: Phase Time (ms)
+  dtype: float
+  default: 10.0
+- id: settle_time_ms
+  label: Retune Settle Time (ms)
+  dtype: float
+  default: 5.0
+- id: repeat_total
+  label: Repeat Total
+  dtype: int
+  default: 1
+- id: use_msg_clock
+  label: Use Message Clock
+  dtype: bool
+  default: 'False'
+
+inputs:
+- label: in
+  domain: stream
+  dtype: complex
+- label: clock
+  domain: message
+  id: clock
+  optional: 1
+
+outputs:
+- label: send1_ctrl
+  domain: message
+  id: send1_ctrl
+  optional: 1
+- label: send2_ctrl
+  domain: message
+  id: send2_ctrl
+  optional: 1
+- label: store1_ctrl
+  domain: message
+  id: store1_ctrl
+  optional: 1
+- label: store2_ctrl
+  domain: message
+  id: store2_ctrl
+  optional: 1
+- label: freq_ctrl
+  domain: message
+  id: freq_ctrl
+  optional: 1
+- label: phase_ctrl
+  domain: message
+  id: phase_ctrl
+  optional: 1
+
+file_format: 1
