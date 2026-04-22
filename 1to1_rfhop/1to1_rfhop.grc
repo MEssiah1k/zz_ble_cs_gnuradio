@@ -115,7 +115,7 @@ blocks:
     start: '0'
     step: '1'
     stop: '20'
-    value: '3'
+    value: '0'
     widget: counter_slider
   states:
     bus_sink: false
@@ -2145,7 +2145,6 @@ blocks:
     settle_time_ms: '5'
     start_btn: start_button
     stop_btn: stop_button
-    use_msg_clock: 'False'
     wait_time_ms: '10'
   states:
     bus_sink: false

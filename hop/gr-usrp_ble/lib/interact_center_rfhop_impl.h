@@ -32,7 +32,6 @@ private:
     int d_repeat_total;
     int d_repeat_index;
     bool d_is_running;
-    bool d_use_msg_clock;
     size_t d_phase_samples;
     size_t d_settle_samples;
     size_t d_wait_counter;
@@ -41,7 +40,6 @@ private:
 
     void refresh_sample_counts();
     void process_state_machine(int nitems);
-    void handle_clock_msg(pmt::pmt_t msg);
 
     void enter_settle_for_current_freq();
     void send_phase1_start();
@@ -64,7 +62,6 @@ public:
     void set_stop_btn(bool stop_btn) override;
     void set_wait_time_ms(float wait_time_ms) override;
     void set_settle_time_ms(float settle_time_ms) override;
-    void set_use_msg_clock(bool use_msg_clock) override;
 
     int work(int noutput_items,
              gr_vector_const_void_star& input_items,

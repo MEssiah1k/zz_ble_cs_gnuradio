@@ -42,7 +42,6 @@ interact_center_rfhop_impl::interact_center_rfhop_impl(int sample_rate,
       d_repeat_total(std::max(1, repeat_total)),
       d_repeat_index(0),
       d_is_running(false),
-      d_use_msg_clock(false),
       d_phase_samples(0),
       d_settle_samples(0),
       d_wait_counter(0),
@@ -55,11 +54,6 @@ interact_center_rfhop_impl::interact_center_rfhop_impl(int sample_rate,
     message_port_register_out(pmt::mp("store2_ctrl"));
     message_port_register_out(pmt::mp("capture_ctrl"));
     message_port_register_out(pmt::mp("freq_ctrl"));
-    message_port_register_out(pmt::mp("phase_ctrl"));
-
-    message_port_register_in(pmt::mp("clock"));
-    set_msg_handler(pmt::mp("clock"),
-                    [this](pmt::pmt_t msg) { this->handle_clock_msg(msg); });
 
     refresh_sample_counts();
 }
@@ -113,28 +107,6 @@ void interact_center_rfhop_impl::set_settle_time_ms(float settle_time_ms)
     refresh_sample_counts();
 }
 
-void interact_center_rfhop_impl::set_use_msg_clock(bool use_msg_clock)
-{
-    d_use_msg_clock = use_msg_clock;
-}
-
-void interact_center_rfhop_impl::handle_clock_msg(pmt::pmt_t msg)
-{
-    if (!d_use_msg_clock) {
-        return;
-    }
-
-    pmt::pmt_t value = pmt::is_pair(msg) ? pmt::cdr(msg) : msg;
-    if (!pmt::is_integer(value)) {
-        return;
-    }
-
-    const long nitems = pmt::to_long(value);
-    if (nitems > 0) {
-        process_state_machine(static_cast<int>(nitems));
-    }
-}
-
 void interact_center_rfhop_impl::enter_settle_for_current_freq()
 {
     send_all_stop();
@@ -147,7 +119,6 @@ void interact_center_rfhop_impl::send_phase1_start()
 {
     message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_stop"));
     message_port_pub(pmt::mp("store2_ctrl"), pmt::intern("store_stop"));
-    message_port_pub(pmt::mp("phase_ctrl"), pmt::cons(pmt::PMT_NIL, pmt::from_long(0)));
     message_port_pub(pmt::mp("store1_ctrl"), make_store_start_msg());
     message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_start"));
 }
@@ -156,7 +127,6 @@ void interact_center_rfhop_impl::send_phase2_start()
 {
     message_port_pub(pmt::mp("store1_ctrl"), pmt::intern("store_stop"));
     message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_stop"));
-    message_port_pub(pmt::mp("phase_ctrl"), pmt::cons(pmt::PMT_NIL, pmt::from_long(1)));
     message_port_pub(pmt::mp("store2_ctrl"), make_store_start_msg());
     message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_start"));
 }
@@ -248,10 +218,7 @@ int interact_center_rfhop_impl::work(int noutput_items,
     (void)input_items;
     (void)output_items;
 
-    if (!d_use_msg_clock) {
-        process_state_machine(noutput_items);
-    }
-
+    process_state_machine(noutput_items);
     return noutput_items;
 }
 

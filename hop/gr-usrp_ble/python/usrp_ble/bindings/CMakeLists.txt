@@ -39,7 +39,7 @@ list(APPEND usrp_ble_python_files
     random_phase_python.cc
     rx_burst_gate_python.cc
     tx_burst_gate_python.cc
-    phase_clock_select_python.cc python_bindings.cc)
+    python_bindings.cc)
 
 GR_PYBIND_MAKE_OOT(usrp_ble
    ../../..

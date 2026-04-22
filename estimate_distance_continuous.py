@@ -130,8 +130,6 @@ def load_capture_rows(path: Path, args: argparse.Namespace) -> list[dict[str, An
         min_segment_len=args.min_segment_len,
         expected_bursts=expected_bursts,
     )
-    if len(rows) < expected_bursts:
-        raise SystemExit(f"{path}: detected bursts {len(rows)} < expected {expected_bursts}")
     return rows
 
 

@@ -4,15 +4,12 @@ category: '[usrp_ble]'
 
 templates:
   imports: from gnuradio import usrp_ble
-  make: |-
-    usrp_ble.interact_center_rfhop(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${settle_time_ms}, ${repeat_total})
-    self.${id}.set_use_msg_clock(${use_msg_clock})
+  make: usrp_ble.interact_center_rfhop(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${settle_time_ms}, ${repeat_total})
   callbacks:
   - set_start_btn(${start_btn})
   - set_stop_btn(${stop_btn})
   - set_wait_time_ms(${wait_time_ms})
   - set_settle_time_ms(${settle_time_ms})
-  - set_use_msg_clock(${use_msg_clock})
 
 parameters:
 - id: sample_rate
@@ -39,19 +36,11 @@ parameters:
   label: Repeat Total
   dtype: int
   default: 1
-- id: use_msg_clock
-  label: Use Message Clock
-  dtype: bool
-  default: 'False'
 
 inputs:
 - label: in
   domain: stream
   dtype: complex
-- label: clock
-  domain: message
-  id: clock
-  optional: 1
 
 outputs:
 - label: send1_ctrl
@@ -77,10 +66,6 @@ outputs:
 - label: freq_ctrl
   domain: message
   id: freq_ctrl
-  optional: 1
-- label: phase_ctrl
-  domain: message
-  id: phase_ctrl
   optional: 1
 
 file_format: 1

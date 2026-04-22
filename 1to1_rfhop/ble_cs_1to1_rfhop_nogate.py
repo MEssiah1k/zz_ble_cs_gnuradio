@@ -73,7 +73,7 @@ class ble_cs_1to1_rfhop_nogate(gr.top_block, Qt.QWidget):
         self.hop_offset = hop_offset = -40e6
         self.stop_button = stop_button = 0
         self.start_button = start_button = 0
-        self.send_gain = send_gain = 3
+        self.send_gain = send_gain = 0
         self.samp_rate = samp_rate = 1e6
         self.recv_gain = recv_gain = 18
         self.display_decim = display_decim = 1
@@ -95,14 +95,13 @@ class ble_cs_1to1_rfhop_nogate(gr.top_block, Qt.QWidget):
         _start_button_push_button.pressed.connect(lambda: self.set_start_button(self._start_button_choices['Pressed']))
         _start_button_push_button.released.connect(lambda: self.set_start_button(self._start_button_choices['Released']))
         self.top_layout.addWidget(_start_button_push_button)
-        self._send_gain_range = Range(0, 20, 1, 3, 200)
+        self._send_gain_range = Range(0, 20, 1, 0, 200)
         self._send_gain_win = RangeWidget(self._send_gain_range, self.set_send_gain, "'send_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._send_gain_win)
         self._recv_gain_range = Range(0, 20, 1, 18, 200)
         self._recv_gain_win = RangeWidget(self._recv_gain_range, self.set_recv_gain, "'recv_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._recv_gain_win)
         self.usrp_ble_interact_center_rfhop_0 = usrp_ble.interact_center_rfhop(int(samp_rate), start_button, stop_button, 10, 5, 3)
-        self.usrp_ble_interact_center_rfhop_0.set_use_msg_clock(False)
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_data_send_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_capture_gate_0_0 = usrp_ble.capture_gate(1)

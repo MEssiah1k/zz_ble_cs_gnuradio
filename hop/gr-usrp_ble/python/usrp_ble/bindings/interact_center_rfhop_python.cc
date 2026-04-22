@@ -46,9 +46,5 @@ void bind_interact_center_rfhop(py::module& m)
         .def("set_settle_time_ms",
              &interact_center_rfhop::set_settle_time_ms,
              py::arg("settle_time_ms"),
-             D(interact_center_rfhop, set_settle_time_ms))
-        .def("set_use_msg_clock",
-             &interact_center_rfhop::set_use_msg_clock,
-             py::arg("use_msg_clock"),
-             D(interact_center_rfhop, set_use_msg_clock));
+             D(interact_center_rfhop, set_settle_time_ms));
 }

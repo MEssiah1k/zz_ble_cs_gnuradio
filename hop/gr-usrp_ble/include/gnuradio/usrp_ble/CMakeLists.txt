@@ -21,5 +21,5 @@ install(FILES
     random_phase.h
     rx_burst_gate.h
     tx_burst_gate.h
-    phase_clock_select.h DESTINATION include/gnuradio/usrp_ble
+    DESTINATION include/gnuradio/usrp_ble
 )

@@ -30,7 +30,6 @@ public:
     virtual void set_stop_btn(bool stop_btn) = 0;
     virtual void set_wait_time_ms(float wait_time_ms) = 0;
     virtual void set_settle_time_ms(float settle_time_ms) = 0;
-    virtual void set_use_msg_clock(bool use_msg_clock) = 0;
 };
 
 } // namespace usrp_ble
