@@ -22,6 +22,7 @@ from analyze_continuous_capture import (
     detect_capture_bursts,
     expected_burst_count,
     load_gr_complex_bin,
+    load_pair_phase_csv,
     resolve_root,
     summarize_freq_rows,
 )
@@ -133,7 +134,84 @@ def load_capture_rows(path: Path, args: argparse.Namespace) -> list[dict[str, An
     return rows
 
 
+def estimate_distance_from_pair_rows(
+    pair_rows: list[dict[str, Any]],
+    args: argparse.Namespace,
+    *,
+    source: str,
+) -> dict[str, Any]:
+    if len(pair_rows) < 2:
+        raise SystemExit("有效公共频点少于 2 个，无法拟合距离")
+
+    rows: list[dict[str, Any]] = []
+    freqs_hz: list[float] = []
+    pair_phase_wrapped: list[float] = []
+
+    for pair_row in sorted(pair_rows, key=lambda item: int(item["freq_index"])):
+        freq_index = int(pair_row["freq_index"])
+        f_hz = float(pair_row["freq_hz"])
+        phase = float(pair_row["pair_phase_rad"])
+        freqs_hz.append(f_hz)
+        pair_phase_wrapped.append(phase)
+        rows.append(
+            {
+                "freq_index": int(freq_index),
+                "freq_hz": float(f_hz),
+                "initiator_valid_repeats": int(pair_row.get("initiator_repeat_count", 0)),
+                "reflector_valid_repeats": int(pair_row.get("reflector_repeat_count", 0)),
+                "pair_i": float(pair_row.get("pair_i", 0.0)),
+                "pair_q": float(pair_row.get("pair_q", 0.0)),
+                "pair_abs": float(pair_row.get("pair_abs", 0.0)),
+                "phase_wrapped": phase,
+                "initiator_summary": str(pair_row.get("initiator_summary", "from_pair_csv")),
+                "reflector_summary": str(pair_row.get("reflector_summary", "from_pair_csv")),
+            }
+        )
+
+    freqs = np.array(freqs_hz, dtype=float)
+    phases_wrapped = np.array(pair_phase_wrapped, dtype=float)
+    phases_unwrapped = np.unwrap(phases_wrapped)
+    slope, intercept = np.polyfit(freqs, phases_unwrapped, 1)
+    fitted = slope * freqs + intercept
+    residual = phases_unwrapped - fitted
+    distance_m = -SPEED_OF_LIGHT * float(slope) / (4.0 * np.pi)
+
+    for row, phase_unwrapped, phase_residual in zip(rows, phases_unwrapped, residual):
+        row["phase_unwrapped"] = float(phase_unwrapped)
+        row["phase_residual"] = float(phase_residual)
+
+    return {
+        "root": str(resolve_root(args.root)),
+        "source": source,
+        "pair_csv": str(args.pair_csv.resolve()) if args.pair_csv is not None else None,
+        "reflector_file": None,
+        "initiator_file": None,
+        "center_freq_hz": float(args.center_freq_hz),
+        "start_offset_hz": float(args.start_offset_hz),
+        "step_hz": float(args.step_hz),
+        "sample_rate": float(args.sample_rate),
+        "initiator_freq_diagnostics": [],
+        "reflector_freq_diagnostics": [],
+        "pair_freq_diagnostics": [],
+        "reflector_invalid_burst_count": 0,
+        "initiator_invalid_burst_count": 0,
+        "valid_freq_count": int(len(rows)),
+        "distance_m": float(distance_m),
+        "slope_rad_per_hz": float(slope),
+        "intercept_rad": float(intercept),
+        "rms_phase_residual": float(np.sqrt(np.mean(residual ** 2))),
+        "max_abs_phase_residual": float(np.max(np.abs(residual))),
+        "rows": rows,
+        "initiator_avg_by_freq": [],
+        "reflector_avg_by_freq": [],
+    }
+
+
 def estimate_distance(args: argparse.Namespace) -> dict[str, Any]:
+    if args.pair_csv is not None:
+        pair_rows = load_pair_phase_csv(args.pair_csv.resolve())
+        return estimate_distance_from_pair_rows(pair_rows, args, source="pair_csv")
+
     root = resolve_root(args.root)
     default_reflector_file, default_initiator_file = default_capture_paths(root)
     reflector_file = default_reflector_file if args.reflector_file is None else args.reflector_file.resolve()
@@ -179,84 +257,61 @@ def estimate_distance(args: argparse.Namespace) -> dict[str, Any]:
     if len(usable_pair_rows) < 2:
         raise SystemExit("有效公共频点少于 2 个，无法拟合距离")
 
-    rows: list[dict[str, Any]] = []
-    freqs_hz: list[float] = []
-    pair_phase_wrapped: list[float] = []
-
+    csv_like_rows: list[dict[str, Any]] = []
     for pair_row in usable_pair_rows:
         freq_index = int(pair_row["freq_index"])
-        f_hz = float(pair_row["freq_hz"])
         z_pair = initiator_avg[freq_index]["z"] * reflector_avg[freq_index]["z"]
-        freqs_hz.append(f_hz)
-        pair_phase_wrapped.append(float(pair_row["pair_phase_rad"]))
-        rows.append(
+        csv_like_rows.append(
             {
                 "freq_index": int(freq_index),
-                "freq_hz": float(f_hz),
-                "initiator_valid_repeats": initiator_avg[freq_index]["repeat_count"],
-                "reflector_valid_repeats": reflector_avg[freq_index]["repeat_count"],
+                "freq_hz": float(pair_row["freq_hz"]),
+                "initiator_repeat_count": initiator_avg[freq_index]["repeat_count"],
+                "reflector_repeat_count": reflector_avg[freq_index]["repeat_count"],
                 "pair_i": float(np.real(z_pair)),
                 "pair_q": float(np.imag(z_pair)),
                 "pair_abs": float(abs(z_pair)),
-                "phase_wrapped": float(pair_row["pair_phase_rad"]),
+                "pair_phase_rad": float(pair_row["pair_phase_rad"]),
                 "initiator_summary": summarize_freq_rows(initiator_diag[freq_index]["rows"]),
                 "reflector_summary": summarize_freq_rows(reflector_diag[freq_index]["rows"]),
             }
         )
-
-    freqs = np.array(freqs_hz, dtype=float)
-    phases_wrapped = np.array(pair_phase_wrapped, dtype=float)
-    phases_unwrapped = np.unwrap(phases_wrapped)
-    slope, intercept = np.polyfit(freqs, phases_unwrapped, 1)
-    fitted = slope * freqs + intercept
-    residual = phases_unwrapped - fitted
-    distance_m = -SPEED_OF_LIGHT * float(slope) / (4.0 * np.pi)
-
-    for row, phase_unwrapped, phase_residual in zip(rows, phases_unwrapped, residual):
-        row["phase_unwrapped"] = float(phase_unwrapped)
-        row["phase_residual"] = float(phase_residual)
-
-    return {
-        "root": str(root),
-        "reflector_file": str(reflector_file),
-        "initiator_file": str(initiator_file),
-        "center_freq_hz": float(args.center_freq_hz),
-        "start_offset_hz": float(args.start_offset_hz),
-        "step_hz": float(args.step_hz),
-        "sample_rate": float(args.sample_rate),
-        "initiator_freq_diagnostics": initiator_diag,
-        "reflector_freq_diagnostics": reflector_diag,
-        "pair_freq_diagnostics": pair_diag,
-        "reflector_invalid_burst_count": reflector_invalid_burst_count,
-        "initiator_invalid_burst_count": initiator_invalid_burst_count,
-        "valid_freq_count": int(len(rows)),
-        "distance_m": float(distance_m),
-        "slope_rad_per_hz": float(slope),
-        "intercept_rad": float(intercept),
-        "rms_phase_residual": float(np.sqrt(np.mean(residual ** 2))),
-        "max_abs_phase_residual": float(np.max(np.abs(residual))),
-        "rows": rows,
-        "initiator_avg_by_freq": [
-            {
-                "freq_index": int(freq_index),
-                "freq_hz": float(initiator_avg[freq_index]["freq_hz"]),
-                "repeat_count": int(initiator_avg[freq_index]["repeat_count"]),
-                "abs": float(initiator_avg[freq_index]["abs"]),
-                "phase_wrapped": float(initiator_avg[freq_index]["phase"]),
-            }
-            for freq_index in sorted(initiator_avg)
-        ],
-        "reflector_avg_by_freq": [
-            {
-                "freq_index": int(freq_index),
-                "freq_hz": float(reflector_avg[freq_index]["freq_hz"]),
-                "repeat_count": int(reflector_avg[freq_index]["repeat_count"]),
-                "abs": float(reflector_avg[freq_index]["abs"]),
-                "phase_wrapped": float(reflector_avg[freq_index]["phase"]),
-            }
-            for freq_index in sorted(reflector_avg)
-        ],
-    }
+    result = estimate_distance_from_pair_rows(csv_like_rows, args, source="capture")
+    result.update(
+        {
+            "reflector_file": str(reflector_file),
+            "initiator_file": str(initiator_file),
+            "center_freq_hz": float(args.center_freq_hz),
+            "start_offset_hz": float(args.start_offset_hz),
+            "step_hz": float(args.step_hz),
+            "sample_rate": float(args.sample_rate),
+            "initiator_freq_diagnostics": initiator_diag,
+            "reflector_freq_diagnostics": reflector_diag,
+            "pair_freq_diagnostics": pair_diag,
+            "reflector_invalid_burst_count": reflector_invalid_burst_count,
+            "initiator_invalid_burst_count": initiator_invalid_burst_count,
+            "initiator_avg_by_freq": [
+                {
+                    "freq_index": int(freq_index),
+                    "freq_hz": float(initiator_avg[freq_index]["freq_hz"]),
+                    "repeat_count": int(initiator_avg[freq_index]["repeat_count"]),
+                    "abs": float(initiator_avg[freq_index]["abs"]),
+                    "phase_wrapped": float(initiator_avg[freq_index]["phase"]),
+                }
+                for freq_index in sorted(initiator_avg)
+            ],
+            "reflector_avg_by_freq": [
+                {
+                    "freq_index": int(freq_index),
+                    "freq_hz": float(reflector_avg[freq_index]["freq_hz"]),
+                    "repeat_count": int(reflector_avg[freq_index]["repeat_count"]),
+                    "abs": float(reflector_avg[freq_index]["abs"]),
+                    "phase_wrapped": float(reflector_avg[freq_index]["phase"]),
+                }
+                for freq_index in sorted(reflector_avg)
+            ],
+        }
+    )
+    return result
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -277,6 +332,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot", type=Path, default=None)
     parser.add_argument("--no-save-plot", action="store_true")
+    parser.add_argument("--pair-csv", type=Path, default=None, help="直接使用 analyze_continuous_capture.py 导出的 pair_phase_by_freq.csv")
     return parser
 
 
@@ -308,32 +364,33 @@ def main() -> None:
         plot_path = default_plot_path(resolve_root(args.root)) if args.save_plot is None else args.save_plot.resolve()
         save_estimate_plot(result, plot_path)
         print(f"saved_plot: {plot_path}")
-        initiator_phase_plot = plot_path.with_name(plot_path.stem + "_initiator_phase.png")
-        reflector_phase_plot = plot_path.with_name(plot_path.stem + "_reflector_phase.png")
-        save_side_phase_plot(
-            "initiator",
-            {
-                int(row["freq_index"]): {
-                    "freq_hz": float(row["freq_hz"]),
-                    "phase": float(row["phase_wrapped"]),
-                }
-                for row in result["initiator_avg_by_freq"]
-            },
-            initiator_phase_plot,
-        )
-        save_side_phase_plot(
-            "reflector",
-            {
-                int(row["freq_index"]): {
-                    "freq_hz": float(row["freq_hz"]),
-                    "phase": float(row["phase_wrapped"]),
-                }
-                for row in result["reflector_avg_by_freq"]
-            },
-            reflector_phase_plot,
-        )
-        print(f"saved_initiator_phase_plot: {initiator_phase_plot}")
-        print(f"saved_reflector_phase_plot: {reflector_phase_plot}")
+        if result["initiator_avg_by_freq"] and result["reflector_avg_by_freq"]:
+            initiator_phase_plot = plot_path.with_name(plot_path.stem + "_initiator_phase.png")
+            reflector_phase_plot = plot_path.with_name(plot_path.stem + "_reflector_phase.png")
+            save_side_phase_plot(
+                "initiator",
+                {
+                    int(row["freq_index"]): {
+                        "freq_hz": float(row["freq_hz"]),
+                        "phase": float(row["phase_wrapped"]),
+                    }
+                    for row in result["initiator_avg_by_freq"]
+                },
+                initiator_phase_plot,
+            )
+            save_side_phase_plot(
+                "reflector",
+                {
+                    int(row["freq_index"]): {
+                        "freq_hz": float(row["freq_hz"]),
+                        "phase": float(row["phase_wrapped"]),
+                    }
+                    for row in result["reflector_avg_by_freq"]
+                },
+                reflector_phase_plot,
+            )
+            print(f"saved_initiator_phase_plot: {initiator_phase_plot}")
+            print(f"saved_reflector_phase_plot: {reflector_phase_plot}")
 
 
 if __name__ == "__main__":

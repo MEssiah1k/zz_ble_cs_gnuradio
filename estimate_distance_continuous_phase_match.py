@@ -22,6 +22,7 @@ from analyze_continuous_capture import (
     detect_capture_bursts,
     expected_burst_count,
     load_gr_complex_bin,
+    load_pair_phase_csv,
     resolve_root,
 )
 
@@ -71,7 +72,76 @@ def solve_phase_offset(measured_wrapped: np.ndarray, model_phase: np.ndarray) ->
     return phase0, np.asarray(wrapped_error, dtype=float)
 
 
+def estimate_distance_phase_match_from_pair_rows(
+    pair_rows: list[dict[str, Any]],
+    args: argparse.Namespace,
+    *,
+    source: str,
+) -> dict[str, Any]:
+    usable_pair_rows = sorted(pair_rows, key=lambda item: int(item["freq_index"]))
+    if len(usable_pair_rows) < 2:
+        raise SystemExit("有效公共频点少于 2 个，无法做相位匹配测距")
+
+    freqs_hz = np.array([float(row["freq_hz"]) for row in usable_pair_rows], dtype=float)
+    measured_wrapped = np.array([float(row["pair_phase_rad"]) for row in usable_pair_rows], dtype=float)
+
+    distance_grid = np.arange(args.distance_min_m, args.distance_max_m + 0.5 * args.distance_step_m, args.distance_step_m)
+    if distance_grid.size == 0:
+        raise SystemExit("distance grid is empty")
+
+    costs = np.empty(distance_grid.size, dtype=float)
+    phase0_values = np.empty(distance_grid.size, dtype=float)
+    for idx, distance_m in enumerate(distance_grid):
+        model_phase = -4.0 * np.pi * freqs_hz * float(distance_m) / SPEED_OF_LIGHT
+        phase0, wrapped_error = solve_phase_offset(measured_wrapped, model_phase)
+        phase0_values[idx] = phase0
+        costs[idx] = float(np.mean(wrapped_error ** 2))
+
+    best_index = int(np.argmin(costs))
+    best_distance_m = float(distance_grid[best_index])
+    best_phase0 = float(phase0_values[best_index])
+    best_model_phase = -4.0 * np.pi * freqs_hz * best_distance_m / SPEED_OF_LIGHT
+    best_wrapped_fit = wrap_to_pi(best_model_phase + best_phase0)
+    best_wrapped_error = np.asarray(wrap_to_pi(measured_wrapped - best_wrapped_fit), dtype=float)
+
+    rows: list[dict[str, Any]] = []
+    for pair_row, fit_phase, phase_error in zip(usable_pair_rows, best_wrapped_fit, best_wrapped_error):
+        rows.append(
+            {
+                "freq_index": int(pair_row["freq_index"]),
+                "freq_hz": float(pair_row["freq_hz"]),
+                "pair_abs": float(pair_row.get("pair_abs", 0.0)),
+                "phase_wrapped_measured": float(pair_row["pair_phase_rad"]),
+                "phase_wrapped_fit": float(fit_phase),
+                "phase_wrapped_error": float(phase_error),
+            }
+        )
+
+    return {
+        "root": str(resolve_root(args.root)),
+        "source": source,
+        "pair_csv": str(args.pair_csv.resolve()) if args.pair_csv is not None else None,
+        "reflector_file": None,
+        "initiator_file": None,
+        "reflector_invalid_burst_count": 0,
+        "initiator_invalid_burst_count": 0,
+        "valid_freq_count": int(len(rows)),
+        "distance_m": best_distance_m,
+        "phase0_rad": best_phase0,
+        "wrapped_phase_cost": float(costs[best_index]),
+        "wrapped_phase_rms_error": float(np.sqrt(np.mean(best_wrapped_error ** 2))),
+        "wrapped_phase_max_abs_error": float(np.max(np.abs(best_wrapped_error))),
+        "distance_grid_m": [float(x) for x in distance_grid],
+        "cost_grid": [float(x) for x in costs],
+        "rows": rows,
+    }
+
+
 def estimate_distance_phase_match(args: argparse.Namespace) -> dict[str, Any]:
+    if args.pair_csv is not None:
+        pair_rows = load_pair_phase_csv(args.pair_csv.resolve())
+        return estimate_distance_phase_match_from_pair_rows(pair_rows, args, source="pair_csv")
+
     root = resolve_root(args.root)
     default_reflector_file, default_initiator_file = default_capture_paths(root)
     reflector_file = default_reflector_file if args.reflector_file is None else args.reflector_file.resolve()
@@ -107,60 +177,17 @@ def estimate_distance_phase_match(args: argparse.Namespace) -> dict[str, Any]:
         )
     pair_diag = build_pair_freq_diagnostics(initiator_diag, reflector_diag, pair_rows)
     usable_pair_rows = [row["pair_row"] for row in pair_diag if row["pair_row"] is not None]
-    if len(usable_pair_rows) < 2:
-        raise SystemExit("有效公共频点少于 2 个，无法做相位匹配测距")
-
-    freqs_hz = np.array([float(row["freq_hz"]) for row in usable_pair_rows], dtype=float)
-    measured_wrapped = np.array([float(row["pair_phase_rad"]) for row in usable_pair_rows], dtype=float)
-
-    distance_grid = np.arange(args.distance_min_m, args.distance_max_m + 0.5 * args.distance_step_m, args.distance_step_m)
-    if distance_grid.size == 0:
-        raise SystemExit("distance grid is empty")
-
-    costs = np.empty(distance_grid.size, dtype=float)
-    phase0_values = np.empty(distance_grid.size, dtype=float)
-    for idx, distance_m in enumerate(distance_grid):
-        model_phase = -4.0 * np.pi * freqs_hz * float(distance_m) / SPEED_OF_LIGHT
-        phase0, wrapped_error = solve_phase_offset(measured_wrapped, model_phase)
-        phase0_values[idx] = phase0
-        costs[idx] = float(np.mean(wrapped_error ** 2))
-
-    best_index = int(np.argmin(costs))
-    best_distance_m = float(distance_grid[best_index])
-    best_phase0 = float(phase0_values[best_index])
-    best_model_phase = -4.0 * np.pi * freqs_hz * best_distance_m / SPEED_OF_LIGHT
-    best_wrapped_fit = wrap_to_pi(best_model_phase + best_phase0)
-    best_wrapped_error = np.asarray(wrap_to_pi(measured_wrapped - best_wrapped_fit), dtype=float)
-
-    rows: list[dict[str, Any]] = []
-    for pair_row, fit_phase, phase_error in zip(usable_pair_rows, best_wrapped_fit, best_wrapped_error):
-        rows.append(
-            {
-                "freq_index": int(pair_row["freq_index"]),
-                "freq_hz": float(pair_row["freq_hz"]),
-                "pair_abs": float(pair_row["pair_abs"]),
-                "phase_wrapped_measured": float(pair_row["pair_phase_rad"]),
-                "phase_wrapped_fit": float(fit_phase),
-                "phase_wrapped_error": float(phase_error),
-            }
-        )
-
-    return {
-        "root": str(root),
-        "reflector_file": str(reflector_file),
-        "initiator_file": str(initiator_file),
-        "reflector_invalid_burst_count": reflector_invalid_burst_count,
-        "initiator_invalid_burst_count": initiator_invalid_burst_count,
-        "valid_freq_count": int(len(rows)),
-        "distance_m": best_distance_m,
-        "phase0_rad": best_phase0,
-        "wrapped_phase_cost": float(costs[best_index]),
-        "wrapped_phase_rms_error": float(np.sqrt(np.mean(best_wrapped_error ** 2))),
-        "wrapped_phase_max_abs_error": float(np.max(np.abs(best_wrapped_error))),
-        "distance_grid_m": [float(x) for x in distance_grid],
-        "cost_grid": [float(x) for x in costs],
-        "rows": rows,
-    }
+    result = estimate_distance_phase_match_from_pair_rows(usable_pair_rows, args, source="capture")
+    result.update(
+        {
+            "root": str(root),
+            "reflector_file": str(reflector_file),
+            "initiator_file": str(initiator_file),
+            "reflector_invalid_burst_count": reflector_invalid_burst_count,
+            "initiator_invalid_burst_count": initiator_invalid_burst_count,
+        }
+    )
+    return result
 
 
 def save_phase_match_plot(result: dict[str, Any], save_path: Path) -> None:
@@ -229,6 +256,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot", type=Path, default=None)
     parser.add_argument("--no-save-plot", action="store_true")
+    parser.add_argument("--pair-csv", type=Path, default=None, help="直接使用 analyze_continuous_capture.py 导出的 pair_phase_by_freq.csv")
     return parser
 
 

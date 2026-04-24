@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,23 @@ from check_bin import circular_phase_spread_rad, classify_signal, phase_cluster_
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "1to1_rfhop"
 DEFAULT_PLOT_ROOT = PROJECT_ROOT / "output_analyze_continuous"
+PAIR_FREQ_CSV_FIELDS = [
+    "freq_index",
+    "freq_hz",
+    "pair_abs",
+    "pair_angle_rad",
+    "pair_phase_rad",
+    "initiator_abs",
+    "initiator_angle_rad",
+    "reflector_abs",
+    "reflector_angle_rad",
+]
+PAIR_ANGLE_CSV_FIELDS = [
+    "freq_index",
+    "freq_hz",
+    "pair_angle_rad",
+    "pair_phase_rad",
+]
 
 
 def resolve_root(root: Path) -> Path:
@@ -219,16 +237,27 @@ def summarize_segment(
     x: np.ndarray,
     *,
     min_segment_len: int,
+    edge_trim_samples: int = 0,
 ) -> dict[str, Any]:
     raw_cluster = phase_cluster_stats(x)
     raw_classification = classify_signal(x)
     core_start, core_stop, selection = find_stable_core_segment(x, min_segment_len=min_segment_len)
+    requested_edge_trim = max(0, int(edge_trim_samples))
+    edge_trim_applied = 0
+    core_len = int(core_stop - core_start)
+    if requested_edge_trim > 0 and core_len > min_segment_len:
+        max_trim_each_side = max(0, int((core_len - min_segment_len) // 2))
+        edge_trim_applied = min(requested_edge_trim, max_trim_each_side)
+        core_start += edge_trim_applied
+        core_stop -= edge_trim_applied
     segment = x[core_start:core_stop]
     cluster = phase_cluster_stats(segment)
     classification = classify_signal(segment)
     z_mean, robust_samples, outlier_samples = robust_complex_mean(segment)
     return {
         "selection": selection,
+        "edge_trim_requested_samples": int(requested_edge_trim),
+        "edge_trim_applied_samples": int(edge_trim_applied),
         "core_offset_start": int(core_start),
         "core_offset_stop": int(core_stop),
         "raw_segment_len": int(x.size),
@@ -267,6 +296,7 @@ def detect_capture_bursts(
     gap_tolerance: int,
     min_segment_len: int,
     expected_bursts: int,
+    edge_trim_samples: int = 0,
 ) -> list[dict[str, Any]]:
     amp = np.abs(capture)
     amp_smooth = moving_average(amp, smooth_len)
@@ -281,7 +311,11 @@ def detect_capture_bursts(
         if raw_len < min_segment_len:
             continue
         raw_segment = capture[start:stop]
-        summary = summarize_segment(raw_segment, min_segment_len=min_segment_len)
+        summary = summarize_segment(
+            raw_segment,
+            min_segment_len=min_segment_len,
+            edge_trim_samples=edge_trim_samples,
+        )
         core_start = int(summary["core_offset_start"])
         core_stop = int(summary["core_offset_stop"])
         abs_start = int(start + core_start)
@@ -664,6 +698,27 @@ def summarize_freq_rows(rows: list[dict[str, Any]]) -> str:
     )
 
 
+def _set_robust_ylim(
+    ax: Any,
+    values: np.ndarray,
+    *,
+    min_span: float,
+    percentile: tuple[float, float] = (1.0, 99.0),
+    margin_ratio: float = 0.20,
+) -> None:
+    finite = np.asarray(values, dtype=float)
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        return
+
+    center = float(np.median(finite))
+    low, high = np.percentile(finite, percentile)
+    span = max(float(high - low), float(min_span))
+    pad = 0.5 * span * float(margin_ratio)
+    half_span = 0.5 * span + pad
+    ax.set_ylim(center - half_span, center + half_span)
+
+
 def plot_capture(rows: list[dict[str, Any]], save_path: Path, title: str) -> None:
     if not rows:
         raise SystemExit("no rows to plot")
@@ -715,6 +770,7 @@ def plot_burst_samples(
 
     axes[0].plot(xs, amp, linewidth=1.0)
     axes[0].set_ylabel("|x|")
+    _set_robust_ylim(axes[0], amp, min_span=0.05)
     axes[0].grid(True, alpha=0.3)
     axes[0].set_title(
         (
@@ -730,12 +786,21 @@ def plot_burst_samples(
     axes[1].plot(xs, angle_unwrapped, linewidth=1.0, color="tab:green")
     axes[1].set_xlabel("Sample Index")
     axes[1].set_ylabel("Unwrapped Angle (rad)")
+    _set_robust_ylim(axes[1], angle_unwrapped, min_span=0.25)
     axes[1].grid(True, alpha=0.3)
 
     axes[2].plot(segment.real, segment.imag, ".", markersize=1.2, alpha=0.7, color="tab:purple")
     axes[2].set_xlabel("I")
     axes[2].set_ylabel("Q")
     axes[2].set_aspect("equal", adjustable="box")
+    i_center = float(np.median(segment.real))
+    q_center = float(np.median(segment.imag))
+    i_low, i_high = np.percentile(segment.real, [1.0, 99.0])
+    q_low, q_high = np.percentile(segment.imag, [1.0, 99.0])
+    iq_span = max(float(i_high - i_low), float(q_high - q_low), 0.08)
+    iq_half_span = 0.5 * iq_span * 1.2
+    axes[2].set_xlim(i_center - iq_half_span, i_center + iq_half_span)
+    axes[2].set_ylim(q_center - iq_half_span, q_center + iq_half_span)
     axes[2].grid(True, alpha=0.3)
 
     fig.tight_layout()
@@ -798,6 +863,78 @@ def plot_pair_phase_by_freq(
     return rows
 
 
+def save_pair_phase_csv(rows: list[dict[str, Any]], save_path: Path) -> None:
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with save_path.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=PAIR_FREQ_CSV_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "freq_index": int(row["freq_index"]),
+                    "freq_hz": float(row["freq_hz"]),
+                    "pair_abs": float(row["pair_abs"]),
+                    "pair_angle_rad": float(row["pair_phase_rad"]),
+                    "pair_phase_rad": float(row["pair_phase_rad"]),
+                    "initiator_abs": float(row["initiator_abs"]),
+                    "initiator_angle_rad": float(row["initiator_phase_rad"]),
+                    "reflector_abs": float(row["reflector_abs"]),
+                    "reflector_angle_rad": float(row["reflector_phase_rad"]),
+                }
+            )
+
+
+def save_pair_angle_csv(rows: list[dict[str, Any]], save_path: Path) -> None:
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with save_path.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=PAIR_ANGLE_CSV_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            phase = float(row["pair_phase_rad"])
+            writer.writerow(
+                {
+                    "freq_index": int(row["freq_index"]),
+                    "freq_hz": float(row["freq_hz"]),
+                    "pair_angle_rad": phase,
+                    "pair_phase_rad": phase,
+                }
+            )
+
+
+def load_pair_phase_csv(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        raise FileNotFoundError(f"pair csv not found: {path}")
+
+    rows: list[dict[str, Any]] = []
+    with path.open("r", newline="", encoding="utf-8") as fp:
+        reader = csv.DictReader(fp)
+        for csv_row in reader:
+            if not csv_row:
+                continue
+            angle_text = (
+                csv_row.get("pair_angle_rad")
+                or csv_row.get("pair_phase_rad")
+                or csv_row.get("phase_wrapped")
+                or csv_row.get("angle_rad")
+            )
+            if angle_text is None:
+                raise ValueError(f"missing pair angle column in {path}")
+            rows.append(
+                {
+                    "freq_index": int(csv_row["freq_index"]),
+                    "freq_hz": float(csv_row["freq_hz"]),
+                    "pair_abs": float(csv_row.get("pair_abs") or 0.0),
+                    "pair_phase_rad": float(angle_text),
+                    "initiator_abs": float(csv_row.get("initiator_abs") or 0.0),
+                    "initiator_phase_rad": float(csv_row.get("initiator_angle_rad") or 0.0),
+                    "reflector_abs": float(csv_row.get("reflector_abs") or 0.0),
+                    "reflector_phase_rad": float(csv_row.get("reflector_angle_rad") or 0.0),
+                }
+            )
+    rows.sort(key=lambda item: int(item["freq_index"]))
+    return rows
+
+
 def build_summary(direction: str, path: Path, rows: list[dict[str, Any]], raw_samples: int, expected_bursts: int) -> dict[str, Any]:
     if rows:
         mean_abs = [float(row["segment_mean_abs"]) for row in rows]
@@ -852,6 +989,7 @@ def analyze_one_capture(
         gap_tolerance=args.gap_tolerance,
         min_segment_len=args.min_segment_len,
         expected_bursts=expected_bursts,
+        edge_trim_samples=args.edge_trim_samples,
     )
 
     result = {
@@ -891,8 +1029,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threshold-ratio", type=float, default=0.35)
     parser.add_argument("--gap-tolerance", type=int, default=48)
     parser.add_argument("--min-segment-len", type=int, default=64)
+    parser.add_argument("--edge-trim-samples", type=int, default=16, help="在稳定 core 基础上额外丢弃每个 burst 头尾各 N 个样本")
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot-dir", type=Path, default=None)
+    parser.add_argument("--save-pair-csv", type=Path, default=None)
+    parser.add_argument("--save-pair-angle-csv", type=Path, default=None)
     return parser
 
 
@@ -927,12 +1068,26 @@ def main() -> None:
         result["initiator"]["rows"],
         pair_phase_plot_path,
     )
+    pair_phase_csv_path = (
+        args.save_pair_csv.resolve()
+        if args.save_pair_csv is not None
+        else args.save_plot_dir.resolve() / "pair_phase_by_freq.csv"
+    )
+    pair_angle_csv_path = (
+        args.save_pair_angle_csv.resolve()
+        if args.save_pair_angle_csv is not None
+        else args.save_plot_dir.resolve() / "pair_angle_by_freq.csv"
+    )
+    save_pair_phase_csv(pair_phase_rows, pair_phase_csv_path)
+    save_pair_angle_csv(pair_phase_rows, pair_angle_csv_path)
     expected_freq_count = int(round(float(expected_bursts) / float(args.repeats))) if args.repeats > 0 else 0
     initiator_diag = build_side_freq_diagnostics(result["initiator"]["rows"], expected_freq_count=expected_freq_count)
     reflector_diag = build_side_freq_diagnostics(result["reflector"]["rows"], expected_freq_count=expected_freq_count)
     pair_diag = build_pair_freq_diagnostics(initiator_diag, reflector_diag, pair_phase_rows)
     result["pair_phase_by_freq"] = pair_phase_rows
     result["pair_phase_plot_path"] = str(pair_phase_plot_path)
+    result["pair_phase_csv_path"] = str(pair_phase_csv_path)
+    result["pair_angle_csv_path"] = str(pair_angle_csv_path)
     result["initiator_freq_diagnostics"] = initiator_diag
     result["reflector_freq_diagnostics"] = reflector_diag
     result["pair_freq_diagnostics"] = pair_diag
@@ -975,6 +1130,8 @@ def main() -> None:
         )
     print(f"saved_plot_dir: {args.save_plot_dir.resolve()}")
     print(f"saved_pair_phase_plot: {pair_phase_plot_path}")
+    print(f"saved_pair_phase_csv: {pair_phase_csv_path}")
+    print(f"saved_pair_angle_csv: {pair_angle_csv_path}")
 
     if args.save_json is not None:
         out_path = args.save_json.resolve()
