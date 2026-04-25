@@ -4,12 +4,15 @@ category: '[usrp_ble]'
 
 templates:
   imports: from gnuradio import usrp_ble
-  make: usrp_ble.interact_center_rfhop(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${settle_time_ms}, ${repeat_total})
+  make: usrp_ble.interact_center_rfhop(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${settle_time_ms}, ${repeat_total}, ${start_freq_index}, ${stop_freq_index}, ${step_hz})
   callbacks:
   - set_start_btn(${start_btn})
   - set_stop_btn(${stop_btn})
   - set_wait_time_ms(${wait_time_ms})
   - set_settle_time_ms(${settle_time_ms})
+  - set_start_freq_index(${start_freq_index})
+  - set_stop_freq_index(${stop_freq_index})
+  - set_step_hz(${step_hz})
 
 parameters:
 - id: sample_rate
@@ -36,6 +39,18 @@ parameters:
   label: Repeat Total
   dtype: int
   default: 1
+- id: start_freq_index
+  label: Start Freq Index
+  dtype: int
+  default: -40
+- id: stop_freq_index
+  label: Stop Freq Index
+  dtype: int
+  default: 40
+- id: step_hz
+  label: Hop Step (Hz)
+  dtype: real
+  default: 1e6
 
 inputs:
 - label: in

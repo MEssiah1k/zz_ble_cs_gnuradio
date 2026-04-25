@@ -15,7 +15,7 @@ namespace gr {
 namespace usrp_ble {
 
 /*!
- * \brief 根据当前频点消息，为输入复信号注入固定距离对应的传播相位。
+ * \brief 根据中心频点与传播距离，为输入复信号注入固定传播相位。
  * \ingroup usrp_ble
  */
 class USRP_BLE_API channel_phase : virtual public gr::sync_block

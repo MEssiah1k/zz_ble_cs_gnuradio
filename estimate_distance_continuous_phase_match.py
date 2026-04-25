@@ -85,7 +85,8 @@ def estimate_distance_phase_match_from_pair_rows(
     freqs_hz = np.array([float(row["freq_hz"]) for row in usable_pair_rows], dtype=float)
     measured_wrapped = np.array([float(row["pair_phase_rad"]) for row in usable_pair_rows], dtype=float)
 
-    distance_grid = np.arange(args.distance_min_m, args.distance_max_m + 0.5 * args.distance_step_m, args.distance_step_m)
+    num_steps = int(round((args.distance_max_m - args.distance_min_m) / args.distance_step_m)) + 1
+    distance_grid = args.distance_min_m + np.arange(num_steps, dtype=float) * args.distance_step_m
     if distance_grid.size == 0:
         raise SystemExit("distance grid is empty")
 
@@ -99,6 +100,9 @@ def estimate_distance_phase_match_from_pair_rows(
 
     best_index = int(np.argmin(costs))
     best_distance_m = float(distance_grid[best_index])
+    best_distance_m = round(best_distance_m / args.distance_step_m) * args.distance_step_m
+    if abs(best_distance_m) < 0.5 * args.distance_step_m:
+        best_distance_m = 0.0
     best_phase0 = float(phase0_values[best_index])
     best_model_phase = -4.0 * np.pi * freqs_hz * best_distance_m / SPEED_OF_LIGHT
     best_wrapped_fit = wrap_to_pi(best_model_phase + best_phase0)

@@ -8,6 +8,7 @@
 #include "interact_center_rfhop_impl.h"
 #include <gnuradio/io_signature.h>
 #include <algorithm>
+#include <cmath>
 
 namespace gr {
 namespace usrp_ble {
@@ -19,10 +20,21 @@ interact_center_rfhop::sptr interact_center_rfhop::make(int sample_rate,
                                                         bool stop_btn,
                                                         float wait_time_ms,
                                                         float settle_time_ms,
-                                                        int repeat_total)
+                                                        int repeat_total,
+                                                        int start_freq_index,
+                                                        int stop_freq_index,
+                                                        double step_hz)
 {
     return gnuradio::make_block_sptr<interact_center_rfhop_impl>(
-        sample_rate, start_btn, stop_btn, wait_time_ms, settle_time_ms, repeat_total);
+        sample_rate,
+        start_btn,
+        stop_btn,
+        wait_time_ms,
+        settle_time_ms,
+        repeat_total,
+        start_freq_index,
+        stop_freq_index,
+        step_hz);
 }
 
 interact_center_rfhop_impl::interact_center_rfhop_impl(int sample_rate,
@@ -30,7 +42,10 @@ interact_center_rfhop_impl::interact_center_rfhop_impl(int sample_rate,
                                                        bool stop_btn,
                                                        float wait_time_ms,
                                                        float settle_time_ms,
-                                                       int repeat_total)
+                                                       int repeat_total,
+                                                       int start_freq_index,
+                                                       int stop_freq_index,
+                                                       double step_hz)
     : gr::sync_block("interact_center_rfhop",
                      gr::io_signature::make(1, 1, sizeof(input_type)),
                      gr::io_signature::make(0, 0, 0)),
@@ -41,12 +56,16 @@ interact_center_rfhop_impl::interact_center_rfhop_impl(int sample_rate,
       d_settle_time_ms(settle_time_ms),
       d_repeat_total(std::max(1, repeat_total)),
       d_repeat_index(0),
+      d_start_freq_index(start_freq_index),
+      d_stop_freq_index(stop_freq_index),
+      d_step_hz(std::max(1.0, std::abs(step_hz))),
+      d_current_freq_index(start_freq_index),
       d_is_running(false),
       d_phase_samples(0),
       d_settle_samples(0),
       d_wait_counter(0),
       d_state(state_t::idle),
-      d_current_freq(-40000000.0)
+      d_current_freq(0.0)
 {
     message_port_register_out(pmt::mp("send1_ctrl"));
     message_port_register_out(pmt::mp("send2_ctrl"));
@@ -56,9 +75,21 @@ interact_center_rfhop_impl::interact_center_rfhop_impl(int sample_rate,
     message_port_register_out(pmt::mp("freq_ctrl"));
 
     refresh_sample_counts();
+    refresh_current_freq();
 }
 
 interact_center_rfhop_impl::~interact_center_rfhop_impl() {}
+
+void interact_center_rfhop_impl::reset_current_freq()
+{
+    d_current_freq_index = d_start_freq_index;
+    refresh_current_freq();
+}
+
+void interact_center_rfhop_impl::refresh_current_freq()
+{
+    d_current_freq = static_cast<double>(d_current_freq_index) * d_step_hz;
+}
 
 void interact_center_rfhop_impl::refresh_sample_counts()
 {
@@ -74,7 +105,7 @@ void interact_center_rfhop_impl::set_start_btn(bool start_btn)
     d_start_btn = start_btn;
     if (!old_val && d_start_btn && !d_is_running) {
         d_is_running = true;
-        d_current_freq = -40000000.0;
+        reset_current_freq();
         d_repeat_index = 0;
         send_all_stop();
         message_port_pub(pmt::mp("capture_ctrl"), pmt::intern("capture_start"));
@@ -105,6 +136,25 @@ void interact_center_rfhop_impl::set_settle_time_ms(float settle_time_ms)
 {
     d_settle_time_ms = settle_time_ms;
     refresh_sample_counts();
+}
+
+void interact_center_rfhop_impl::set_start_freq_index(int start_freq_index)
+{
+    d_start_freq_index = start_freq_index;
+    if (!d_is_running) {
+        reset_current_freq();
+    }
+}
+
+void interact_center_rfhop_impl::set_stop_freq_index(int stop_freq_index)
+{
+    d_stop_freq_index = stop_freq_index;
+}
+
+void interact_center_rfhop_impl::set_step_hz(double step_hz)
+{
+    d_step_hz = std::max(1.0, std::abs(step_hz));
+    refresh_current_freq();
 }
 
 void interact_center_rfhop_impl::enter_settle_for_current_freq()
@@ -150,13 +200,27 @@ pmt::pmt_t interact_center_rfhop_impl::make_store_start_msg() const
     pmt::pmt_t msg = pmt::make_dict();
     msg = pmt::dict_add(msg, pmt::intern("cmd"), pmt::intern("store_start"));
     msg = pmt::dict_add(msg, pmt::intern("freq_index"), pmt::from_long(current_freq_index()));
+    msg = pmt::dict_add(msg, pmt::intern("freq_index_signed"), pmt::from_long(d_current_freq_index));
     msg = pmt::dict_add(msg, pmt::intern("repeat_index"), pmt::from_long(d_repeat_index));
     return msg;
 }
 
 int interact_center_rfhop_impl::current_freq_index() const
 {
-    return static_cast<int>((d_current_freq + 40000000.0) / 1000000.0 + 0.5);
+    if (d_start_freq_index <= d_stop_freq_index) {
+        return d_current_freq_index - d_start_freq_index;
+    }
+
+    return d_start_freq_index - d_current_freq_index;
+}
+
+bool interact_center_rfhop_impl::is_last_frequency() const
+{
+    if (d_start_freq_index <= d_stop_freq_index) {
+        return d_current_freq_index >= d_stop_freq_index;
+    }
+
+    return d_current_freq_index <= d_stop_freq_index;
 }
 
 void interact_center_rfhop_impl::process_state_machine(int nitems)
@@ -193,13 +257,18 @@ void interact_center_rfhop_impl::process_state_machine(int nitems)
                     send_phase1_start();
                 } else {
                     d_repeat_index = 0;
-                    d_current_freq += 1000000.0;
-                    if (d_current_freq > 40000000.0) {
+                    if (is_last_frequency()) {
                         d_is_running = false;
                         d_state = state_t::idle;
                         send_all_stop();
                         message_port_pub(pmt::mp("capture_ctrl"), pmt::intern("capture_stop"));
                     } else {
+                        if (d_start_freq_index <= d_stop_freq_index) {
+                            d_current_freq_index += 1;
+                        } else {
+                            d_current_freq_index -= 1;
+                        }
+                        refresh_current_freq();
                         enter_settle_for_current_freq();
                     }
                 }

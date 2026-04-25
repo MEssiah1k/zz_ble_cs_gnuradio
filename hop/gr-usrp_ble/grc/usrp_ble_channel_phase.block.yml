@@ -41,9 +41,6 @@ inputs:
 - label: in
   domain: stream
   dtype: complex
-- label: freq
-  domain: message
-  optional: 1
 
 outputs:
 - label: out

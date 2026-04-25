@@ -24,12 +24,18 @@ public:
                      bool stop_btn,
                      float wait_time_ms,
                      float settle_time_ms,
-                     int repeat_total);
+                     int repeat_total,
+                     int start_freq_index,
+                     int stop_freq_index,
+                     double step_hz);
 
     virtual void set_start_btn(bool start_btn) = 0;
     virtual void set_stop_btn(bool stop_btn) = 0;
     virtual void set_wait_time_ms(float wait_time_ms) = 0;
     virtual void set_settle_time_ms(float settle_time_ms) = 0;
+    virtual void set_start_freq_index(int start_freq_index) = 0;
+    virtual void set_stop_freq_index(int stop_freq_index) = 0;
+    virtual void set_step_hz(double step_hz) = 0;
 };
 
 } // namespace usrp_ble

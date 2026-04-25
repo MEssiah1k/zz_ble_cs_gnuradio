@@ -31,6 +31,10 @@ private:
     float d_settle_time_ms;
     int d_repeat_total;
     int d_repeat_index;
+    int d_start_freq_index;
+    int d_stop_freq_index;
+    double d_step_hz;
+    int d_current_freq_index;
     bool d_is_running;
     size_t d_phase_samples;
     size_t d_settle_samples;
@@ -40,6 +44,9 @@ private:
 
     void refresh_sample_counts();
     void process_state_machine(int nitems);
+    void reset_current_freq();
+    bool is_last_frequency() const;
+    void refresh_current_freq();
 
     void enter_settle_for_current_freq();
     void send_phase1_start();
@@ -55,13 +62,19 @@ public:
                                bool stop_btn,
                                float wait_time_ms,
                                float settle_time_ms,
-                               int repeat_total);
+                               int repeat_total,
+                               int start_freq_index,
+                               int stop_freq_index,
+                               double step_hz);
     ~interact_center_rfhop_impl() override;
 
     void set_start_btn(bool start_btn) override;
     void set_stop_btn(bool stop_btn) override;
     void set_wait_time_ms(float wait_time_ms) override;
     void set_settle_time_ms(float settle_time_ms) override;
+    void set_start_freq_index(int start_freq_index) override;
+    void set_stop_freq_index(int stop_freq_index) override;
+    void set_step_hz(double step_hz) override;
 
     int work(int noutput_items,
              gr_vector_const_void_star& input_items,

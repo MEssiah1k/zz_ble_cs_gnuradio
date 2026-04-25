@@ -36,14 +36,8 @@ channel_phase_impl::channel_phase_impl(double center_freq_hz,
       d_center_freq_hz(center_freq_hz),
       d_distance_m(distance_m),
       d_amplitude(amplitude),
-      d_current_freq_hz(0.0),
       d_channel_rot(gr_complex(1.0f, 0.0f))
 {
-    message_port_register_in(pmt::mp("freq"));
-    set_msg_handler(
-        pmt::mp("freq"),
-        [this](pmt::pmt_t msg) { this->handle_freq_msg(msg); });
-
     std::lock_guard<std::mutex> lock(d_mutex);
     update_channel_rot_locked();
 }
@@ -74,44 +68,10 @@ void channel_phase_impl::set_amplitude(float amplitude)
 void channel_phase_impl::update_channel_rot_locked()
 {
     const double tau = d_distance_m / SPEED_OF_LIGHT;
-    const double rf_freq = d_center_freq_hz + d_current_freq_hz;
-    const double phase = -2.0 * PI * rf_freq * tau;
+    const double phase = -2.0 * PI * d_center_freq_hz * tau;
     d_channel_rot = gr_complex(
         static_cast<float>(d_amplitude * std::cos(phase)),
         static_cast<float>(d_amplitude * std::sin(phase)));
-}
-
-void channel_phase_impl::handle_freq_msg(pmt::pmt_t msg)
-{
-    double current_freq_hz = 0.0;
-    bool parsed = false;
-
-    if (pmt::is_pair(msg) && pmt::is_symbol(pmt::car(msg))) {
-        if (pmt::symbol_to_string(pmt::car(msg)) == "freq" && pmt::is_number(pmt::cdr(msg))) {
-            current_freq_hz = pmt::to_double(pmt::cdr(msg));
-            parsed = true;
-        }
-    } else if (pmt::is_dict(msg)) {
-        const pmt::pmt_t key = pmt::intern("freq");
-        if (pmt::dict_has_key(msg, key)) {
-            const pmt::pmt_t value = pmt::dict_ref(msg, key, pmt::PMT_NIL);
-            if (pmt::is_number(value)) {
-                current_freq_hz = pmt::to_double(value);
-                parsed = true;
-            }
-        }
-    } else if (pmt::is_number(msg)) {
-        current_freq_hz = pmt::to_double(msg);
-        parsed = true;
-    }
-
-    if (!parsed) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(d_mutex);
-    d_current_freq_hz = current_freq_hz;
-    update_channel_rot_locked();
 }
 
 int channel_phase_impl::work(int noutput_items,

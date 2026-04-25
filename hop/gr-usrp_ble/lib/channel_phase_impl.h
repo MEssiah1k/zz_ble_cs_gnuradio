@@ -23,11 +23,9 @@ private:
     double d_center_freq_hz;
     double d_distance_m;
     float d_amplitude;
-    double d_current_freq_hz;
     gr_complex d_channel_rot;
     std::mutex d_mutex;
 
-    void handle_freq_msg(pmt::pmt_t msg);
     void update_channel_rot_locked();
 
 public:

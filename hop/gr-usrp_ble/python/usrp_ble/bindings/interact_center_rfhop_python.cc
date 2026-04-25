@@ -30,6 +30,9 @@ void bind_interact_center_rfhop(py::module& m)
              py::arg("wait_time_ms"),
              py::arg("settle_time_ms"),
              py::arg("repeat_total"),
+             py::arg("start_freq_index"),
+             py::arg("stop_freq_index"),
+             py::arg("step_hz"),
              D(interact_center_rfhop, make))
         .def("set_start_btn",
              &interact_center_rfhop::set_start_btn,
@@ -46,5 +49,17 @@ void bind_interact_center_rfhop(py::module& m)
         .def("set_settle_time_ms",
              &interact_center_rfhop::set_settle_time_ms,
              py::arg("settle_time_ms"),
-             D(interact_center_rfhop, set_settle_time_ms));
+             D(interact_center_rfhop, set_settle_time_ms))
+        .def("set_start_freq_index",
+             &interact_center_rfhop::set_start_freq_index,
+             py::arg("start_freq_index"),
+             D(interact_center_rfhop, set_start_freq_index))
+        .def("set_stop_freq_index",
+             &interact_center_rfhop::set_stop_freq_index,
+             py::arg("stop_freq_index"),
+             D(interact_center_rfhop, set_stop_freq_index))
+        .def("set_step_hz",
+             &interact_center_rfhop::set_step_hz,
+             py::arg("step_hz"),
+             D(interact_center_rfhop, set_step_hz));
 }
