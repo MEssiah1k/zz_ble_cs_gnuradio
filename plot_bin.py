@@ -25,6 +25,12 @@ PAIR_MAPPINGS = {
         "data_initiator_ref_local",
     ),
 }
+DIR_LABELS = {
+    "data_reflector_rx_from_initiator": "reflector",
+    "data_reflector_ref_local": "reflector_ref",
+    "data_initiator_rx_from_reflector": "initiator",
+    "data_initiator_ref_local": "initiator_ref",
+}
 NEW_STYLE_RE = re.compile(r"^data_f(?P<freq>\d+)_r(?P<repeat>\d+)$")
 OLD_STYLE_RE = re.compile(r"^data_(?P<index>\d+)$")
 
@@ -99,6 +105,23 @@ def file_sort_key(path: Path) -> tuple[int, int, int, str]:
 
 def load_gr_complex_bin(path: Path) -> np.ndarray:
     return np.fromfile(path, dtype=np.complex64)
+
+
+def output_label(dir_path: Path) -> str:
+    return DIR_LABELS.get(dir_path.name, dir_path.name)
+
+
+def plot_stem(file_path: Path, sequence_index: int) -> str:
+    tokens = parse_file_tokens(file_path)
+    if tokens["freq_index"] is not None and tokens["repeat_index"] is not None:
+        return (
+            f"burst_{sequence_index:03d}"
+            f"_f{int(tokens['freq_index']):02d}"
+            f"_r{int(tokens['repeat_index'])}"
+        )
+    if tokens["legacy_index"] is not None:
+        return f"burst_{sequence_index:03d}_data_{int(tokens['legacy_index']):03d}"
+    return f"burst_{sequence_index:03d}_{file_path.stem}"
 
 
 def select_window(x: np.ndarray, max_points: int | None) -> tuple[np.ndarray, np.ndarray]:
@@ -180,23 +203,21 @@ def plot_constellation(x: np.ndarray, save_path: Path, max_points: int | None) -
     plt.close()
 
 
-def plot_file(file_path: Path, output_base: Path, max_points: int | None, all_plots: bool) -> None:
+def plot_file(
+    file_path: Path,
+    output_base: Path,
+    sequence_index: int,
+    max_points: int | None,
+    all_plots: bool,
+) -> None:
     x = load_gr_complex_bin(file_path)
-    tokens = parse_file_tokens(file_path)
-    if tokens["freq_index"] is not None and tokens["repeat_index"] is not None:
-        target_dir = (
-            output_base
-            / file_path.parent.name
-            / f"freq_{int(tokens['freq_index']):02d}"
-            / f"rep_{int(tokens['repeat_index']):02d}"
-        )
-    else:
-        target_dir = output_base / file_path.parent.name / file_path.stem
+    target_dir = output_base / output_label(file_path.parent) / "bursts"
     target_dir.mkdir(parents=True, exist_ok=True)
-    plot_constellation(x, target_dir / f"{file_path.stem}_constellation.png", max_points)
+    stem = plot_stem(file_path, sequence_index)
+    plot_constellation(x, target_dir / f"{stem}.png", max_points)
     if all_plots:
-        plot_time_iq(x, target_dir / f"{file_path.stem}_iq.png", max_points)
-        plot_amplitude_phase(x, target_dir / file_path.stem, max_points)
+        plot_time_iq(x, target_dir / f"{stem}_iq.png", max_points)
+        plot_amplitude_phase(x, target_dir / stem, max_points)
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -250,10 +271,11 @@ def main() -> None:
             list_bin_files(dir_path),
             first_repeat_only=args.first_repeat_only,
         )
-        for file_path in files:
+        for index, file_path in enumerate(files, start=1):
             plot_file(
                 file_path,
                 args.output_dir / args.root.name,
+                index,
                 args.max_points,
                 args.all_plots,
             )

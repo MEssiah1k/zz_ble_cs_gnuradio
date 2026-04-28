@@ -745,7 +745,10 @@ blocks:
     repeat_total: '3'
     sample_rate: '100000000'
     start_btn: start_button
+    start_freq_index: '-40'
     stop_btn: stop_button
+    stop_freq_index: '40'
+    step_hz: 1e6
     use_msg_clock: 'False'
     wait_time_ms: '10'
   states:

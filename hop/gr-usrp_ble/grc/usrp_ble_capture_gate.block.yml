@@ -4,13 +4,19 @@ category: '[usrp_ble]'
 
 templates:
   imports: from gnuradio import usrp_ble
-  make: usrp_ble.capture_gate(${num_channels})
+  make: usrp_ble.capture_gate(${num_channels}, ${group_index})
+  callbacks:
+  - set_group_index(${group_index})
 
 parameters:
 - id: num_channels
   label: Num Channels
   dtype: int
   default: '1'
+- id: group_index
+  label: Group Index
+  dtype: int
+  default: '0'
 
 inputs:
 - label: in0
@@ -20,6 +26,7 @@ inputs:
   domain: stream
   dtype: complex
   optional: true
+  hide: ${ num_channels <= 1 }
 - label: command
   domain: message
   id: command
@@ -32,5 +39,6 @@ outputs:
   domain: stream
   dtype: complex
   optional: true
+  hide: ${ num_channels <= 1 }
 
 file_format: 1

@@ -47,17 +47,29 @@ namespace gr {
     class interact_center_impl : public interact_center
     {
      private:
+      enum class state_t {
+        idle = 0,
+        phase1,
+        phase2,
+      };
+
       int _sample_rate;              // 输入采样率，用于把毫秒等待时长换算成采样点数量
       bool _start_btn;               // 开始按钮当前状态，用于检测上升沿启动
       bool _stop_btn;                // 停止按钮当前状态，用于检测上升沿停止
       float _wait_time_ms;           // 每个阶段的目标等待时间，单位毫秒
       int _repeat_total;             // 每个频点需要重复采集的总次数
       int _repeat_index;             // 当前频点已经进行到第几次重复（从 0 开始）
+      int _capture_group_total;      // 连续捕获总组数，目前支持 1 或 2 组
+      int _capture_group_index;      // 当前正在写入第几组连续捕获文件（从 0 开始）
+      int _start_freq_index;         // 扫频起点，实际频率 = index * step_hz
+      int _stop_freq_index;          // 扫频终点，支持正向或反向扫描
+      int _current_freq_index;       // 当前扫频 index
+      double _step_hz;               // 相邻频点间隔，单位 Hz
       bool _is_running;              // 整个实验流程是否正在运行
       bool _use_msg_clock;           // 是否使用消息计时，self_2 用真实 burst 消费量推进状态机
-      size_t _samples_to_wait;       // 当前每个阶段应等待的总采样点数量
+      size_t _phase_samples;         // 每个发送阶段应等待的总采样点数量
       size_t _wait_counter;          // 当前阶段已经累计等待的采样点数量
-      int _state;                    // 状态机编号：0 空闲，1 第一阶段，2 第二阶段
+      state_t _state;                // 状态机当前阶段
       double _current_freq;          // 当前扫频频点，会通过消息端口发给外部频率控制对象
       
       /*
@@ -67,6 +79,7 @@ namespace gr {
        */
       void process_state_machine(int nitems);
       void handle_clock_msg(pmt::pmt_t msg);
+      void refresh_sample_counts();
 
       /*
        * 函数说明：
@@ -93,6 +106,9 @@ namespace gr {
        * 停止所有被调度的子模块，确保系统恢复到静默态。
        */
       void send_all_stop();
+      void send_capture_start_for_current_group();
+      void send_capture_stop_for_current_group();
+      void send_all_capture_stop();
 
       /*
        * 函数说明：
@@ -101,15 +117,30 @@ namespace gr {
       void send_freq_command();
       pmt::pmt_t make_store_start_msg() const;
       int current_freq_index() const;
+      void reset_current_freq();
+      void refresh_current_freq();
+      bool is_last_frequency() const;
 
      public:
-      interact_center_impl(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms, int repeat_total);
+      interact_center_impl(int sample_rate,
+                           bool start_btn,
+                           bool stop_btn,
+                           float wait_time_ms,
+                           int repeat_total,
+                           int start_freq_index,
+                           int stop_freq_index,
+                           double step_hz,
+                           int capture_groups);
       ~interact_center_impl();
       
       void set_start_btn(bool start_btn) override;
       void set_stop_btn(bool stop_btn) override;
       void set_wait_time_ms(float wait_time_ms) override;
       void set_use_msg_clock(bool use_msg_clock) override;
+      void set_start_freq_index(int start_freq_index) override;
+      void set_stop_freq_index(int stop_freq_index) override;
+      void set_step_hz(double step_hz) override;
+      void set_capture_groups(int capture_groups) override;
 
       /*
        * 函数说明：

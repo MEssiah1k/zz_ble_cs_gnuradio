@@ -6,11 +6,11 @@
 #
 # GNU Radio Python Flow Graph
 # Title: Not titled yet
-# GNU Radio version: 3.10.9.2
+# GNU Radio version: 3.10.7.0
 
+from packaging.version import Version as StrictVersion
 from PyQt5 import Qt
 from gnuradio import qtgui
-from PyQt5 import QtCore
 from gnuradio import analog
 from gnuradio import blocks
 from gnuradio import blocks, gr
@@ -24,6 +24,8 @@ from argparse import ArgumentParser
 from gnuradio.eng_arg import eng_float, intx
 from gnuradio import eng_notation
 from gnuradio import usrp_ble
+from gnuradio.qtgui import Range, RangeWidget
+from PyQt5 import QtCore
 import sip
 
 
@@ -54,9 +56,10 @@ class self_rfhop(gr.top_block, Qt.QWidget):
         self.settings = Qt.QSettings("GNU Radio", "self_rfhop")
 
         try:
-            geometry = self.settings.value("geometry")
-            if geometry:
-                self.restoreGeometry(geometry)
+            if StrictVersion(Qt.qVersion()) < StrictVersion("5.0.0"):
+                self.restoreGeometry(self.settings.value("geometry").toByteArray())
+            else:
+                self.restoreGeometry(self.settings.value("geometry"))
         except BaseException as exc:
             print(f"Qt GUI: Could not restore geometry: {str(exc)}", file=sys.stderr)
 
@@ -91,18 +94,18 @@ class self_rfhop(gr.top_block, Qt.QWidget):
         _start_button_push_button.pressed.connect(lambda: self.set_start_button(self._start_button_choices['Pressed']))
         _start_button_push_button.released.connect(lambda: self.set_start_button(self._start_button_choices['Released']))
         self.top_layout.addWidget(_start_button_push_button)
-        self.usrp_ble_interact_center_rfhop_0 = usrp_ble.interact_center_rfhop(int(samp_rate), start_button, stop_button, 10, 30, 3, (-40), 40, 1e4)
+        self.usrp_ble_interact_center_rfhop_0 = usrp_ble.interact_center_rfhop(int(samp_rate), start_button, stop_button, 10, 30, 3, (-40), 40, 1e6)
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_data_send_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_channel_phase_0_0 = usrp_ble.channel_phase((centetr_fre+tone_freq), distance_m, 1.0)
         self.usrp_ble_channel_phase_0 = usrp_ble.channel_phase((centetr_fre+tone_freq), distance_m, 1.0)
         self.usrp_ble_capture_gate_0_0 = usrp_ble.capture_gate(1)
         self.usrp_ble_capture_gate_0 = usrp_ble.capture_gate(1)
-        self._send_gain_range = qtgui.Range(0, 20, 1, 0, 200)
-        self._send_gain_win = qtgui.RangeWidget(self._send_gain_range, self.set_send_gain, "'send_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
+        self._send_gain_range = Range(0, 20, 1, 0, 200)
+        self._send_gain_win = RangeWidget(self._send_gain_range, self.set_send_gain, "'send_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._send_gain_win)
-        self._recv_gain_range = qtgui.Range(0, 20, 1, 18, 200)
-        self._recv_gain_win = qtgui.RangeWidget(self._recv_gain_range, self.set_recv_gain, "'recv_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
+        self._recv_gain_range = Range(0, 20, 1, 18, 200)
+        self._recv_gain_win = RangeWidget(self._recv_gain_range, self.set_recv_gain, "'recv_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._recv_gain_win)
         self.qtgui_time_sink_x_0 = qtgui.time_sink_c(
             1024, #size
@@ -204,9 +207,9 @@ class self_rfhop(gr.top_block, Qt.QWidget):
         self.blocks_multiply_conjugate_cc_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_msgpair_to_var_hop_offset = blocks.msg_pair_to_var(self.set_hop_offset)
         self.blocks_message_debug_0 = blocks.message_debug(True, gr.log_levels.info)
-        self.blocks_file_sink_0_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/mess1ah/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector2', False)
+        self.blocks_file_sink_0_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector2', False)
         self.blocks_file_sink_0_0.set_unbuffered(False)
-        self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/mess1ah/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator2', False)
+        self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator2', False)
         self.blocks_file_sink_0.set_unbuffered(False)
         self.analog_sig_source_x_0_1_0 = analog.sig_source_c(100e6, analog.GR_COS_WAVE, hop_offset, 1, 0, 0)
         self.analog_sig_source_x_0_1 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, tone_freq, 1, 0, 0)
@@ -337,6 +340,9 @@ class self_rfhop(gr.top_block, Qt.QWidget):
 
 def main(top_block_cls=self_rfhop, options=None):
 
+    if StrictVersion("4.5.0") <= StrictVersion(Qt.qVersion()) < StrictVersion("5.0.0"):
+        style = gr.prefs().get_string('qtgui', 'style', 'raster')
+        Qt.QApplication.setGraphicsSystem(style)
     qapp = Qt.QApplication(sys.argv)
 
     tb = top_block_cls()

@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-codex")
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -31,7 +33,34 @@ from analyze_continuous_capture import (
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "1to1_rfhop"
 DEFAULT_PLOT_DIR = PROJECT_ROOT / "output_estimate_plot_continuous"
-SPEED_OF_LIGHT = 299792458.0
+DEFAULT_PROPAGATION_SPEED_MPS = 2.3e8
+TWO_PI = 2.0 * np.pi
+
+
+def unwrap_with_negative_slope_prior(
+    phases_wrapped: np.ndarray,
+    *,
+    upward_tolerance_rad: float = 0.2,
+) -> np.ndarray:
+    """Unwrap pair phase by enforcing a mostly downward branch.
+
+    Frequency is sorted low to high before this is called. If the next wrapped
+    sample lands above the current unwrapped sample by more than a small noise
+    tolerance, move it down by 2pi until it is back on the downward branch.
+    """
+    phases = np.asarray(phases_wrapped, dtype=float)
+    if phases.size <= 1:
+        return phases.copy()
+
+    unwrapped = np.empty_like(phases)
+    unwrapped[0] = phases[0]
+    for idx in range(1, phases.size):
+        value = float(phases[idx])
+        prev = float(unwrapped[idx - 1])
+        while value > prev + float(upward_tolerance_rad):
+            value -= TWO_PI
+        unwrapped[idx] = value
+    return unwrapped
 
 
 def save_estimate_plot(result: dict[str, Any], save_path: Path) -> None:
@@ -170,14 +199,21 @@ def estimate_distance_from_pair_rows(
 
     freqs = np.array(freqs_hz, dtype=float)
     phases_wrapped = np.array(pair_phase_wrapped, dtype=float)
-    phases_unwrapped = np.unwrap(phases_wrapped)
+    phases_unwrapped_np = np.unwrap(phases_wrapped)
+    unwrap_upward_tolerance_rad = float(getattr(args, "unwrap_upward_tolerance_rad", 0.2))
+    phases_unwrapped = unwrap_with_negative_slope_prior(
+        phases_wrapped,
+        upward_tolerance_rad=unwrap_upward_tolerance_rad,
+    )
     slope, intercept = np.polyfit(freqs, phases_unwrapped, 1)
     fitted = slope * freqs + intercept
     residual = phases_unwrapped - fitted
-    distance_m = -SPEED_OF_LIGHT * float(slope) / (4.0 * np.pi)
+    propagation_speed_mps = float(getattr(args, "propagation_speed_mps", DEFAULT_PROPAGATION_SPEED_MPS))
+    distance_m = -propagation_speed_mps * float(slope) / (4.0 * np.pi)
 
-    for row, phase_unwrapped, phase_residual in zip(rows, phases_unwrapped, residual):
+    for row, phase_unwrapped, phase_unwrapped_np, phase_residual in zip(rows, phases_unwrapped, phases_unwrapped_np, residual):
         row["phase_unwrapped"] = float(phase_unwrapped)
+        row["phase_unwrapped_np"] = float(phase_unwrapped_np)
         row["phase_residual"] = float(phase_residual)
 
     return {
@@ -190,6 +226,7 @@ def estimate_distance_from_pair_rows(
         "start_offset_hz": float(args.start_offset_hz),
         "step_hz": float(args.step_hz),
         "sample_rate": float(args.sample_rate),
+        "propagation_speed_mps": float(propagation_speed_mps),
         "initiator_freq_diagnostics": [],
         "reflector_freq_diagnostics": [],
         "pair_freq_diagnostics": [],
@@ -199,6 +236,8 @@ def estimate_distance_from_pair_rows(
         "distance_m": float(distance_m),
         "slope_rad_per_hz": float(slope),
         "intercept_rad": float(intercept),
+        "unwrap_method": "monotonic_downward_branch",
+        "unwrap_upward_tolerance_rad": float(unwrap_upward_tolerance_rad),
         "rms_phase_residual": float(np.sqrt(np.mean(residual ** 2))),
         "max_abs_phase_residual": float(np.max(np.abs(residual))),
         "rows": rows,
@@ -228,8 +267,16 @@ def estimate_distance(args: argparse.Namespace) -> dict[str, Any]:
         args.repeats,
     ) / float(args.repeats))) if args.repeats > 0 else 0
 
-    initiator_diag = build_side_freq_diagnostics(initiator_rows, expected_freq_count=expected_freq_count)
-    reflector_diag = build_side_freq_diagnostics(reflector_rows, expected_freq_count=expected_freq_count)
+    initiator_diag = build_side_freq_diagnostics(
+        initiator_rows,
+        expected_freq_count=expected_freq_count,
+        expected_repeats=args.repeats,
+    )
+    reflector_diag = build_side_freq_diagnostics(
+        reflector_rows,
+        expected_freq_count=expected_freq_count,
+        expected_repeats=args.repeats,
+    )
     reflector_avg = average_rows_by_freq(reflector_rows)
     initiator_avg = average_rows_by_freq(initiator_rows)
 
@@ -329,6 +376,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threshold-ratio", type=float, default=0.35)
     parser.add_argument("--gap-tolerance", type=int, default=48)
     parser.add_argument("--min-segment-len", type=int, default=64)
+    parser.add_argument("--distance-min-m", type=float, default=0.0)
+    parser.add_argument("--distance-max-m", type=float, default=20.0)
+    parser.add_argument("--distance-step-m", type=float, default=0.01)
+    parser.add_argument("--propagation-speed-mps", type=float, default=DEFAULT_PROPAGATION_SPEED_MPS, help="传播速度，默认 2.3e8 m/s（铜质有线测量）")
+    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.2)
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot", type=Path, default=None)
     parser.add_argument("--no-save-plot", action="store_true")

@@ -66,11 +66,23 @@ blocks:
     coordinate: [424, 16.0]
     rotation: 0
     state: enabled
+- name: repeat_total
+  id: variable
+  parameters:
+    comment: ''
+    value: '2'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [576, 132.0]
+    rotation: 0
+    state: enabled
 - name: samp_rate
   id: variable
   parameters:
     comment: ''
-    value: 100e6
+    value: 10e6
   states:
     bus_sink: false
     bus_source: false
@@ -115,7 +127,31 @@ blocks:
     bus_structure: null
     coordinate: [536, 16.0]
     rotation: 0
-    state: true
+    state: enabled
+- name: start_freq_index
+  id: variable
+  parameters:
+    comment: ''
+    value: '-40'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [168, 132.0]
+    rotation: 0
+    state: enabled
+- name: step_hz
+  id: variable
+  parameters:
+    comment: ''
+    value: 1e5
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [440, 132.0]
+    rotation: 0
+    state: enabled
 - name: stop_button
   id: variable_qtgui_push_button
   parameters:
@@ -133,39 +169,28 @@ blocks:
     coordinate: [712, 16.0]
     rotation: 0
     state: true
-- name: variable_0
+- name: stop_freq_index
   id: variable
   parameters:
     comment: ''
-    value: '0'
+    value: '40'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1232, 48.0]
+    coordinate: [304, 132.0]
     rotation: 0
     state: enabled
-- name: analog_sig_source_x_0
-  id: analog_sig_source_x
+- name: wait_time_ms
+  id: variable
   parameters:
-    affinity: ''
-    alias: ''
-    amp: '1'
-    comment: "\u72B6\u6001\u673A\u72EC\u7ACB\u65F6\u949F"
-    freq: '1000'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    offset: '0'
-    phase: '0'
-    samp_rate: samp_rate
-    showports: 'False'
-    type: complex
-    waveform: analog.GR_COS_WAVE
+    comment: ''
+    value: '100'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [96, 1048.0]
+    coordinate: [712, 132.0]
     rotation: 0
     state: enabled
 - name: analog_sig_source_x_0_1
@@ -175,7 +200,7 @@ blocks:
     alias: ''
     amp: '1'
     comment: ''
-    freq: -49e6
+    freq: start_freq_index*step_hz
     maxoutbuf: '0'
     minoutbuf: '0'
     offset: '0'
@@ -191,6 +216,114 @@ blocks:
     coordinate: [88, 464.0]
     rotation: 0
     state: true
+- name: blocks_file_sink_initiator_2m
+  id: blocks_file_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    append: 'False'
+    comment: Continuous initiator-side capture, 2m group.
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_2m
+    type: complex
+    unbuffered: 'False'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2360, 884.0]
+    rotation: 0
+    state: enabled
+- name: blocks_file_sink_initiator_4m
+  id: blocks_file_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    append: 'False'
+    comment: Continuous initiator-side capture, 4m group.
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_4m
+    type: complex
+    unbuffered: 'False'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2360, 980.0]
+    rotation: 0
+    state: enabled
+- name: blocks_file_sink_reflector1_2m
+  id: blocks_file_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    append: 'False'
+    comment: Continuous reflector1-side capture, 2m group.
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_2m
+    type: complex
+    unbuffered: 'False'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2368, 476.0]
+    rotation: 0
+    state: enabled
+- name: blocks_file_sink_reflector1_4m
+  id: blocks_file_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    append: 'False'
+    comment: Continuous reflector1-side capture, 4m group.
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_4m
+    type: complex
+    unbuffered: 'False'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2368, 580.0]
+    rotation: 0
+    state: enabled
+- name: blocks_file_sink_reflector2_2m
+  id: blocks_file_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    append: 'False'
+    comment: Continuous reflector2-side capture, 2m group.
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_2m
+    type: complex
+    unbuffered: 'False'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2368, 684.0]
+    rotation: 0
+    state: enabled
+- name: blocks_file_sink_reflector2_4m
+  id: blocks_file_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    append: 'False'
+    comment: Continuous reflector2-side capture, 4m group.
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_4m
+    type: complex
+    unbuffered: 'False'
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2368, 780.0]
+    rotation: 0
+    state: enabled
 - name: blocks_message_debug_0
   id: blocks_message_debug
   parameters:
@@ -203,7 +336,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [768, 1152.0]
+    coordinate: [704, 1176.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0
@@ -269,7 +402,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [624, 536.0]
+    coordinate: [640, 456.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0_0
@@ -306,27 +439,6 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate: [632, 792.0]
-    rotation: 0
-    state: enabled
-- name: blocks_throttle_clock
-  id: blocks_throttle2
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: "\u72B6\u6001\u673A\u65F6\u949F\u9650\u901F"
-    ignoretag: 'True'
-    limit: auto
-    maximum: '0.1'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    samples_per_second: samp_rate
-    type: complex
-    vlen: '1'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [336, 1048.0]
     rotation: 0
     state: enabled
 - name: qtgui_freq_sink_x_0
@@ -407,104 +519,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2128, 1036.0]
-    rotation: 0
-    state: true
-- name: qtgui_time_sink_x_0
-  id: qtgui_time_sink_x
-  parameters:
-    affinity: ''
-    alias: ''
-    alpha1: '1.0'
-    alpha10: '1.0'
-    alpha2: '1.0'
-    alpha3: '1.0'
-    alpha4: '1.0'
-    alpha5: '1.0'
-    alpha6: '1.0'
-    alpha7: '1.0'
-    alpha8: '1.0'
-    alpha9: '1.0'
-    autoscale: 'False'
-    axislabels: 'True'
-    color1: blue
-    color10: dark blue
-    color2: red
-    color3: green
-    color4: black
-    color5: cyan
-    color6: magenta
-    color7: yellow
-    color8: dark red
-    color9: dark green
-    comment: ''
-    ctrlpanel: 'False'
-    entags: 'True'
-    grid: 'False'
-    gui_hint: ''
-    label1: Signal 1
-    label10: Signal 10
-    label2: Signal 2
-    label3: Signal 3
-    label4: Signal 4
-    label5: Signal 5
-    label6: Signal 6
-    label7: Signal 7
-    label8: Signal 8
-    label9: Signal 9
-    legend: 'True'
-    marker1: '-1'
-    marker10: '-1'
-    marker2: '-1'
-    marker3: '-1'
-    marker4: '-1'
-    marker5: '-1'
-    marker6: '-1'
-    marker7: '-1'
-    marker8: '-1'
-    marker9: '-1'
-    name: '""'
-    nconnections: '1'
-    size: '1024'
-    srate: samp_rate
-    stemplot: 'False'
-    style1: '1'
-    style10: '1'
-    style2: '1'
-    style3: '1'
-    style4: '1'
-    style5: '1'
-    style6: '1'
-    style7: '1'
-    style8: '1'
-    style9: '1'
-    tr_chan: '0'
-    tr_delay: '0'
-    tr_level: '0.0'
-    tr_mode: qtgui.TRIG_MODE_FREE
-    tr_slope: qtgui.TRIG_SLOPE_POS
-    tr_tag: '""'
-    type: complex
-    update_time: '0.10'
-    width1: '1'
-    width10: '1'
-    width2: '1'
-    width3: '1'
-    width4: '1'
-    width5: '1'
-    width6: '1'
-    width7: '1'
-    width8: '1'
-    width9: '1'
-    ylabel: Amplitude
-    ymax: '1'
-    ymin: '-1'
-    yunit: '""'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [2128, 1164.0]
+    coordinate: [360, 356.0]
     rotation: 0
     state: true
 - name: uhd_usrp_sink_0_0_0
@@ -618,7 +633,7 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dev_addr: '"addr=192.168.20.2"'
+    dev_addr: '"addr=192.168.40.2"'
     dev_args: '"send_frame_size=8000,num_send_frames=512"'
     gain0: send_gain
     gain1: send_gain
@@ -895,7 +910,7 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dev_addr: '"addr=192.168.10.2"'
+    dev_addr: '"addr=192.168.30.2"'
     dev_args: '"send_frame_size=8000,num_send_frames=512"'
     gain0: send_gain
     gain1: '0'
@@ -1058,7 +1073,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1200, 696.0]
+    coordinate: [1200, 788.0]
     rotation: 0
     state: enabled
 - name: uhd_usrp_source_0
@@ -1236,7 +1251,7 @@ blocks:
     dc_offs_enb7: default
     dc_offs_enb8: default
     dc_offs_enb9: default
-    dev_addr: '"addr=192.168.20.2"'
+    dev_addr: '"addr=192.168.40.2"'
     dev_args: '"recv_frame_size=8000,num_recv_frames=512"'
     gain0: recv_gain
     gain1: recv_gain
@@ -1672,7 +1687,7 @@ blocks:
     dc_offs_enb7: default
     dc_offs_enb8: default
     dc_offs_enb9: default
-    dev_addr: '"addr=192.168.10.2"'
+    dev_addr: '"addr=192.168.30.2"'
     dev_args: '"recv_frame_size=8000,num_recv_frames=512"'
     gain0: recv_gain
     gain1: '0'
@@ -1930,9 +1945,111 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1496, 696.0]
+    coordinate: [1496, 788.0]
     rotation: 0
     state: true
+- name: usrp_ble_capture_gate_initiator_2m
+  id: usrp_ble_capture_gate
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Gate initiator stream, 2m group.
+    group_index: '0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_channels: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2176, 888.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_capture_gate_initiator_4m
+  id: usrp_ble_capture_gate
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Gate initiator stream, 4m group.
+    group_index: '1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_channels: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2176, 984.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_capture_gate_reflector1_2m
+  id: usrp_ble_capture_gate
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Gate reflector1 stream, 2m group.
+    group_index: '0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_channels: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2176, 480.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_capture_gate_reflector1_4m
+  id: usrp_ble_capture_gate
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Gate reflector1 stream, 4m group.
+    group_index: '1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_channels: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2176, 584.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_capture_gate_reflector2_2m
+  id: usrp_ble_capture_gate
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Gate reflector2 stream, 2m group.
+    group_index: '0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_channels: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2176, 688.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_capture_gate_reflector2_4m
+  id: usrp_ble_capture_gate
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Gate reflector2 stream, 4m group.
+    group_index: '1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_channels: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [2176, 784.0]
+    rotation: 0
+    state: enabled
 - name: usrp_ble_data_send_0
   id: usrp_ble_data_send
   parameters:
@@ -1967,68 +2084,24 @@ blocks:
     coordinate: [96, 768.0]
     rotation: 0
     state: true
-- name: usrp_ble_data_store_0
-  id: usrp_ble_data_store
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator
-    skip_len: '35000'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [2152, 612.0]
-    rotation: 0
-    state: true
-- name: usrp_ble_data_store_0_0
-  id: usrp_ble_data_store
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator
-    skip_len: '35000'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [2152, 740.0]
-    rotation: 0
-    state: true
-- name: usrp_ble_data_store_0_1
-  id: usrp_ble_data_store
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors
-    skip_len: '50000'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [2144, 916.0]
-    rotation: 0
-    state: true
 - name: usrp_ble_interact_center_0
   id: usrp_ble_interact_center
   parameters:
     affinity: ''
     alias: ''
+    capture_groups: '2'
     comment: ''
     maxoutbuf: '0'
     minoutbuf: '0'
-    repeat_total: '3'
-    sample_rate: '100000000'
+    repeat_total: repeat_total
+    sample_rate: int(samp_rate)
     start_btn: start_button
+    start_freq_index: start_freq_index
+    step_hz: step_hz
     stop_btn: stop_button
+    stop_freq_index: stop_freq_index
     use_msg_clock: 'False'
-    wait_time_ms: '10'
+    wait_time_ms: wait_time_ms
   states:
     bus_sink: false
     bus_source: false
@@ -2036,119 +2109,52 @@ blocks:
     coordinate: [336, 1048.0]
     rotation: 0
     state: true
-- name: usrp_ble_random_phase_0
-  id: usrp_ble_random_phase
-  parameters:
-    affinity: ''
-    alias: ''
-    amplitude: '1.0'
-    comment: ''
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    seed: '1'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [392, 520.0]
-    rotation: 0
-    state: enabled
-- name: usrp_ble_random_phase_1
-  id: usrp_ble_random_phase
-  parameters:
-    affinity: ''
-    alias: ''
-    amplitude: '1.0'
-    comment: ''
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    seed: '2'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [392, 624.0]
-    rotation: 0
-    state: enabled
-- name: usrp_ble_random_phase_2
-  id: usrp_ble_random_phase
-  parameters:
-    affinity: ''
-    alias: ''
-    amplitude: '1.0'
-    comment: ''
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    seed: '3'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [392, 728.0]
-    rotation: 0
-    state: enabled
-- name: usrp_ble_tx_burst_gate_0
-  id: usrp_ble_tx_burst_gate
-  parameters:
-    add_uhd_tags: 'True'
-    affinity: ''
-    alias: ''
-    burst_len: '100000'
-    comment: "\u5355\u4E2A gate \u7EDF\u4E00\u63A7\u5236 initiator\u3001reflector1\u3001\
-      reflector2 \u4E09\u8DEF\u53D1\u9001"
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    num_channels: '3'
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [864, 656.0]
-    rotation: 0
-    state: true
 
 connections:
-- [analog_sig_source_x_0, '0', blocks_throttle_clock, '0']
-- [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_0, '0']
-- [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_1, '0']
-- [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_2, '0']
-- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_data_store_0, '0']
-- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_data_store_0_0, '0']
-- [blocks_multiply_conjugate_cc_0_1, '0', qtgui_freq_sink_x_0, '0']
-- [blocks_multiply_conjugate_cc_0_1, '0', qtgui_time_sink_x_0, '0']
-- [blocks_multiply_conjugate_cc_0_1, '0', usrp_ble_data_store_0_1, '0']
-- [blocks_multiply_xx_0, '0', usrp_ble_tx_burst_gate_0, '0']
-- [blocks_multiply_xx_0_0, '0', usrp_ble_tx_burst_gate_0, '1']
-- [blocks_multiply_xx_0_1, '0', usrp_ble_tx_burst_gate_0, '2']
-- [blocks_throttle_clock, '0', usrp_ble_interact_center_0, '0']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0, '1']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0_0, '1']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0_1, '1']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0, '0']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0_0, '0']
+- [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0_1, '0']
+- [analog_sig_source_x_0_1, '0', qtgui_freq_sink_x_0, '0']
+- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_reflector1_2m, '0']
+- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_reflector1_4m, '0']
+- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_reflector2_2m, '0']
+- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_reflector2_4m, '0']
+- [blocks_multiply_conjugate_cc_0_1, '0', usrp_ble_capture_gate_initiator_2m, '0']
+- [blocks_multiply_conjugate_cc_0_1, '0', usrp_ble_capture_gate_initiator_4m, '0']
+- [blocks_multiply_xx_0, '0', uhd_usrp_sink_0_0_0_0, '0']
+- [blocks_multiply_xx_0_0, '0', uhd_usrp_sink_0_0_0, '0']
+- [blocks_multiply_xx_0_1, '0', uhd_usrp_sink_0_0_0, '1']
 - [uhd_usrp_source_0, '0', blocks_multiply_conjugate_cc_0, '0']
 - [uhd_usrp_source_0, '1', blocks_multiply_conjugate_cc_0_0, '0']
 - [uhd_usrp_source_0_0, '0', blocks_multiply_conjugate_cc_0_1, '0']
+- [usrp_ble_capture_gate_initiator_2m, '0', blocks_file_sink_initiator_2m, '0']
+- [usrp_ble_capture_gate_initiator_4m, '0', blocks_file_sink_initiator_4m, '0']
+- [usrp_ble_capture_gate_reflector1_2m, '0', blocks_file_sink_reflector1_2m, '0']
+- [usrp_ble_capture_gate_reflector1_4m, '0', blocks_file_sink_reflector1_4m, '0']
+- [usrp_ble_capture_gate_reflector2_2m, '0', blocks_file_sink_reflector2_2m, '0']
+- [usrp_ble_capture_gate_reflector2_4m, '0', blocks_file_sink_reflector2_4m, '0']
 - [usrp_ble_data_send_0, '0', blocks_multiply_xx_0, '1']
+- [usrp_ble_data_send_0, '0', usrp_ble_interact_center_0, '0']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_0, '1']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_1, '1']
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_initiator_2m, command]
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_initiator_4m, command]
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector1_2m,
+  command]
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector1_4m,
+  command]
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector2_2m,
+  command]
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector2_4m,
+  command]
 - [usrp_ble_interact_center_0, freq_ctrl, analog_sig_source_x_0_1, cmd]
 - [usrp_ble_interact_center_0, freq_ctrl, blocks_message_debug_0, print]
-- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_random_phase_0, freq]
-- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_random_phase_1, freq]
-- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_random_phase_2, freq]
 - [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_data_send_0, command]
-- [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_tx_burst_gate_0, command]
 - [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_data_send_0_0, command]
-- [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_tx_burst_gate_0, command]
-- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_0, command]
-- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_0_0, command]
-- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_0_1, command]
-- [usrp_ble_random_phase_0, '0', blocks_multiply_conjugate_cc_0_1, '1']
-- [usrp_ble_random_phase_0, '0', blocks_multiply_xx_0, '0']
-- [usrp_ble_random_phase_1, '0', blocks_multiply_conjugate_cc_0, '1']
-- [usrp_ble_random_phase_1, '0', blocks_multiply_xx_0_0, '0']
-- [usrp_ble_random_phase_2, '0', blocks_multiply_conjugate_cc_0_0, '1']
-- [usrp_ble_random_phase_2, '0', blocks_multiply_xx_0_1, '0']
-- [usrp_ble_tx_burst_gate_0, '0', uhd_usrp_sink_0_0_0_0, '0']
-- [usrp_ble_tx_burst_gate_0, '1', uhd_usrp_sink_0_0_0, '0']
-- [usrp_ble_tx_burst_gate_0, '2', uhd_usrp_sink_0_0_0, '1']
 
 metadata:
   file_format: 1
-  grc_version: 3.10.9.2
+  grc_version: 3.10.7.0

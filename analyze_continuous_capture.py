@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import csv
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib-codex")
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -21,6 +24,21 @@ from check_bin import circular_phase_spread_rad, classify_signal, phase_cluster_
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "1to1_rfhop"
 DEFAULT_PLOT_ROOT = PROJECT_ROOT / "output_analyze_continuous"
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "continuous_capture_config.json"
+DEFAULT_CAPTURE_GROUPS = [
+    {
+        "label": "2m",
+        "distance_m": 2.0,
+        "reflector_file": "data_reflector_rx_from_initiator_2m",
+        "initiator_file": "data_initiator_rx_from_reflector_2m",
+    },
+    {
+        "label": "4m",
+        "distance_m": 4.0,
+        "reflector_file": "data_reflector_rx_from_initiator_4m",
+        "initiator_file": "data_initiator_rx_from_reflector_4m",
+    },
+]
 PAIR_FREQ_CSV_FIELDS = [
     "freq_index",
     "freq_hz",
@@ -57,6 +75,7 @@ def default_capture_paths(root: Path) -> tuple[Path, Path]:
     resolved_root = resolve_root(root)
     reflector = _pick_existing_path(
         [
+            resolved_root / "data_reflector_rx_from_initiator_2m",
             resolved_root / "data_reflector_rx_from_initiator2",
             resolved_root / "continuous_capture" / "data_reflector_rx_from_initiator.bin",
             resolved_root / "data_reflector_rx_from_initiator.bin",
@@ -64,12 +83,45 @@ def default_capture_paths(root: Path) -> tuple[Path, Path]:
     )
     initiator = _pick_existing_path(
         [
+            resolved_root / "data_initiator_rx_from_reflector_2m",
             resolved_root / "data_initiator_rx_from_reflector2",
             resolved_root / "continuous_capture" / "data_initiator_rx_from_reflector.bin",
             resolved_root / "data_initiator_rx_from_reflector.bin",
         ]
     )
     return reflector, initiator
+
+
+def resolve_group_file(root: Path, value: str | Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return resolve_root(root) / path
+
+
+def capture_group_specs(config: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_groups = config.get("capture_groups", DEFAULT_CAPTURE_GROUPS)
+    if not isinstance(raw_groups, list):
+        raise SystemExit("capture_groups 必须是 list")
+
+    groups: list[dict[str, Any]] = []
+    for idx, item in enumerate(raw_groups):
+        if not isinstance(item, dict):
+            raise SystemExit(f"capture_groups[{idx}] 必须是 JSON object")
+        label = str(item.get("label", f"group{idx + 1}"))
+        reflector_file = item.get("reflector_file")
+        initiator_file = item.get("initiator_file")
+        if reflector_file is None or initiator_file is None:
+            raise SystemExit(f"capture_groups[{idx}] 缺少 reflector_file 或 initiator_file")
+        groups.append(
+            {
+                "label": label,
+                "distance_m": item.get("distance_m"),
+                "reflector_file": str(reflector_file),
+                "initiator_file": str(initiator_file),
+            }
+        )
+    return groups
 
 
 def load_gr_complex_bin(path: Path) -> np.ndarray:
@@ -86,6 +138,33 @@ def expected_burst_count(start_offset_hz: float, stop_offset_hz: float, step_hz:
 def default_plot_dir(root: Path) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return (DEFAULT_PLOT_ROOT / root.name / timestamp).resolve()
+
+
+def load_config(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {}
+    resolved = path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
+    if not resolved.exists():
+        return {}
+    with resolved.open("r", encoding="utf-8") as fp:
+        data = json.load(fp)
+    if not isinstance(data, dict):
+        raise SystemExit(f"配置文件必须是 JSON object: {resolved}")
+    return data
+
+
+def apply_config_defaults(parser: argparse.ArgumentParser, config: dict[str, Any]) -> None:
+    defaults: dict[str, Any] = {}
+    for action in parser._actions:
+        if not action.option_strings or action.dest in {"help", "config"}:
+            continue
+        if action.dest not in config:
+            continue
+        value = config[action.dest]
+        if action.type is Path and value is not None:
+            value = Path(value)
+        defaults[action.dest] = value
+    parser.set_defaults(**defaults)
 
 
 def moving_average(x: np.ndarray, width: int) -> np.ndarray:
@@ -284,6 +363,37 @@ def summarize_segment(
     }
 
 
+def _summarize_candidate_task(task: tuple[int, int, int, np.ndarray, int, int]) -> dict[str, Any]:
+    candidate_index, start, stop, raw_segment, min_segment_len, edge_trim_samples = task
+    summary = summarize_segment(
+        raw_segment,
+        min_segment_len=min_segment_len,
+        edge_trim_samples=edge_trim_samples,
+    )
+    core_start = int(summary["core_offset_start"])
+    core_stop = int(summary["core_offset_stop"])
+    abs_start = int(start + core_start)
+    abs_stop = int(start + core_stop)
+    raw_len = int(stop - start)
+    summary.update(
+        {
+            "candidate_index": int(candidate_index),
+            "raw_segment_start": int(start),
+            "raw_segment_stop": int(stop),
+            "raw_segment_len": int(raw_len),
+            "segment_start": int(abs_start),
+            "segment_stop": int(abs_stop),
+            "segment_len": int(max(0, abs_stop - abs_start)),
+            "score": float(
+                summary["robust_mean_abs"]
+                * (0.25 + summary["segment_coherence"])
+                * np.sqrt(max(1, abs_stop - abs_start))
+            ),
+        }
+    )
+    return summary
+
+
 def detect_capture_bursts(
     capture: np.ndarray,
     *,
@@ -297,6 +407,7 @@ def detect_capture_bursts(
     min_segment_len: int,
     expected_bursts: int,
     edge_trim_samples: int = 0,
+    jobs: int = 1,
 ) -> list[dict[str, Any]]:
     amp = np.abs(capture)
     amp_smooth = moving_average(amp, smooth_len)
@@ -305,34 +416,30 @@ def detect_capture_bursts(
     threshold = noise_floor + float(threshold_ratio) * max(0.0, signal_level - noise_floor)
     mask = _merge_short_gaps(amp_smooth >= threshold, gap_tolerance)
 
-    candidates: list[dict[str, Any]] = []
+    tasks: list[tuple[int, int, int, np.ndarray, int, int]] = []
     for candidate_index, (start, stop) in enumerate(_true_runs(mask)):
         raw_len = stop - start
         if raw_len < min_segment_len:
             continue
-        raw_segment = capture[start:stop]
-        summary = summarize_segment(
-            raw_segment,
-            min_segment_len=min_segment_len,
-            edge_trim_samples=edge_trim_samples,
+        tasks.append(
+            (
+                int(candidate_index),
+                int(start),
+                int(stop),
+                capture[start:stop],
+                int(min_segment_len),
+                int(edge_trim_samples),
+            )
         )
-        core_start = int(summary["core_offset_start"])
-        core_stop = int(summary["core_offset_stop"])
-        abs_start = int(start + core_start)
-        abs_stop = int(start + core_stop)
-        summary.update(
-            {
-                "candidate_index": int(candidate_index),
-                "raw_segment_start": int(start),
-                "raw_segment_stop": int(stop),
-                "raw_segment_len": int(raw_len),
-                "segment_start": int(abs_start),
-                "segment_stop": int(abs_stop),
-                "segment_len": int(max(0, abs_stop - abs_start)),
-                "score": float(summary["robust_mean_abs"] * (0.25 + summary["segment_coherence"]) * np.sqrt(max(1, abs_stop - abs_start))),
-            }
-        )
-        candidates.append(summary)
+
+    worker_count = max(1, int(jobs))
+    if worker_count > 1 and len(tasks) > 1:
+        worker_count = min(worker_count, len(tasks))
+        chunksize = max(1, len(tasks) // (worker_count * 4))
+        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+            candidates = list(executor.map(_summarize_candidate_task, tasks, chunksize=chunksize))
+    else:
+        candidates = [_summarize_candidate_task(task) for task in tasks]
 
     candidates = filter_sequence_candidates(
         candidates,
@@ -472,6 +579,35 @@ def _group_cost(rows: list[dict[str, Any]]) -> float:
     )
 
 
+def _partition_repeat_groups(rows: list[dict[str, Any]], repeats: int) -> list[list[dict[str, Any]]]:
+    max_group_size = max(1, int(repeats))
+    n = len(rows)
+    if n <= 0:
+        return []
+
+    best_cost = [float("inf")] * (n + 1)
+    best_size = [1] * (n + 1)
+    best_cost[n] = 0.0
+
+    for idx in range(n - 1, -1, -1):
+        for size in range(1, max_group_size + 1):
+            stop = idx + size
+            if stop > n:
+                break
+            cost = _group_cost(rows[idx:stop]) + best_cost[stop]
+            if cost < best_cost[idx]:
+                best_cost[idx] = cost
+                best_size[idx] = size
+
+    groups: list[list[dict[str, Any]]] = []
+    idx = 0
+    while idx < n:
+        size = max(1, min(max_group_size, best_size[idx]))
+        groups.append(rows[idx : idx + size])
+        idx += size
+    return groups
+
+
 def assign_freq_groups(
     candidates: list[dict[str, Any]],
     *,
@@ -492,61 +628,37 @@ def assign_freq_groups(
     if expected_freq_count <= 0 or not rows:
         return rows
 
-    valid_starts = np.array(
-        [int(row["raw_segment_start"]) for row in rows if bool(row.get("sequence_ok", True))],
-        dtype=float,
-    )
-    if valid_starts.size >= 2:
-        nominal_repeat_gap = float(np.median(np.diff(valid_starts)))
-    else:
-        nominal_repeat_gap = 20000.0
-    short_fragment_gap = 0.75 * nominal_repeat_gap
+    if repeats > 1:
+        groups = _partition_repeat_groups(rows, repeats)
+        for freq_index, group_rows in enumerate(groups):
+            for repeat_index, row in enumerate(group_rows):
+                if freq_index >= expected_freq_count:
+                    row["slot_kind"] = "overflow"
+                    row["quality_flags"] = list(row.get("quality_flags", [])) + ["overflow_after_expected_slots"]
+                    continue
+
+                row["assigned_to_freq"] = bool(row.get("sequence_ok", True))
+                row["freq_index"] = int(freq_index)
+                row["repeat_index"] = int(repeat_index)
+                row["freq_hz"] = float(center_freq_hz + start_offset_hz + freq_index * step_hz)
+                row["slot_kind"] = "valid_slot" if bool(row.get("sequence_ok", True)) else "invalid_slot"
+                if len(group_rows) < repeats:
+                    row["quality_flags"] = list(row.get("quality_flags", [])) + ["partial_repeat_group"]
+        return rows
 
     freq_index = 0
-    idx = 0
-    while idx < len(rows):
-        row = rows[idx]
+    for row in rows:
         if freq_index >= expected_freq_count:
             row["slot_kind"] = "overflow"
             row["quality_flags"] = list(row.get("quality_flags", [])) + ["overflow_after_expected_slots"]
-            idx += 1
             continue
 
         freq_hz = float(center_freq_hz + start_offset_hz + freq_index * step_hz)
-
-        if not bool(row.get("sequence_ok", True)):
-            invalid_run: list[int] = [idx]
-            idx += 1
-            while idx < len(rows) and not bool(rows[idx].get("sequence_ok", True)):
-                prev_row = rows[invalid_run[-1]]
-                next_row = rows[idx]
-                start_gap = int(next_row["raw_segment_start"]) - int(prev_row["raw_segment_start"])
-                allow_extra_fragment = start_gap <= short_fragment_gap
-                if len(invalid_run) >= repeats and not allow_extra_fragment:
-                    break
-                invalid_run.append(idx)
-                idx += 1
-            for repeat_index, row_index in enumerate(invalid_run):
-                rows[row_index]["assigned_to_freq"] = False
-                rows[row_index]["freq_index"] = int(freq_index)
-                rows[row_index]["repeat_index"] = int(repeat_index)
-                rows[row_index]["freq_hz"] = freq_hz
-                rows[row_index]["slot_kind"] = "invalid_slot"
-            freq_index += 1
-            continue
-
-        valid_run: list[int] = [idx]
-        idx += 1
-        while idx < len(rows) and bool(rows[idx].get("sequence_ok", True)) and len(valid_run) < repeats:
-            valid_run.append(idx)
-            idx += 1
-
-        for repeat_index, row_index in enumerate(valid_run):
-            rows[row_index]["assigned_to_freq"] = True
-            rows[row_index]["freq_index"] = int(freq_index)
-            rows[row_index]["repeat_index"] = int(repeat_index)
-            rows[row_index]["freq_hz"] = freq_hz
-            rows[row_index]["slot_kind"] = "valid_slot"
+        row["assigned_to_freq"] = bool(row.get("sequence_ok", True))
+        row["freq_index"] = int(freq_index)
+        row["repeat_index"] = 0
+        row["freq_hz"] = freq_hz
+        row["slot_kind"] = "valid_slot" if bool(row.get("sequence_ok", True)) else "invalid_slot"
         freq_index += 1
 
     return rows
@@ -606,6 +718,7 @@ def build_side_freq_diagnostics(
     rows: list[dict[str, Any]],
     *,
     expected_freq_count: int,
+    expected_repeats: int,
 ) -> list[dict[str, Any]]:
     grouped: dict[int, list[dict[str, Any]]] = {}
     for row in rows:
@@ -615,12 +728,14 @@ def build_side_freq_diagnostics(
         grouped.setdefault(freq_index, []).append(row)
 
     diagnostics: list[dict[str, Any]] = []
+    # 历史逻辑默认把 >=2 次视为 usable；当实验本身 repeats=1 时，应允许 1 次即 usable。
+    required_valid_repeats = 1 if int(expected_repeats) <= 1 else 2
     for freq_index in range(expected_freq_count):
         freq_rows = sorted(grouped.get(freq_index, []), key=lambda item: int(item.get("repeat_index", -1)))
         assigned_valid = [row for row in freq_rows if bool(row.get("assigned_to_freq", False)) and bool(row.get("sequence_ok", True))]
         invalid_rows = [row for row in freq_rows if not bool(row.get("sequence_ok", True))]
         if assigned_valid:
-            state = "usable" if len(assigned_valid) >= 2 else "partial"
+            state = "usable" if len(assigned_valid) >= required_valid_repeats else "partial"
         elif invalid_rows:
             state = "invalid_slot"
         elif freq_rows:
@@ -809,6 +924,17 @@ def plot_burst_samples(
     plt.close(fig)
 
 
+def _plot_burst_samples_task(task: tuple[np.ndarray, dict[str, Any], str, str]) -> None:
+    segment, row, save_path_text, direction = task
+    if segment.size == 0:
+        return
+
+    row_for_plot = dict(row)
+    row_for_plot["segment_start"] = 0
+    row_for_plot["segment_stop"] = int(segment.size)
+    plot_burst_samples(segment, row_for_plot, Path(save_path_text), direction)
+
+
 def plot_pair_phase_by_freq(
     reflector_rows: list[dict[str, Any]],
     initiator_rows: list[dict[str, Any]],
@@ -990,6 +1116,7 @@ def analyze_one_capture(
         min_segment_len=args.min_segment_len,
         expected_bursts=expected_bursts,
         edge_trim_samples=args.edge_trim_samples,
+        jobs=args.jobs,
     )
 
     result = {
@@ -1001,21 +1128,35 @@ def analyze_one_capture(
         save_path = args.save_plot_dir.resolve() / f"{direction}_capture_summary.png"
         plot_capture(rows, save_path, f"{direction} continuous capture summary")
         result["plot_path"] = str(save_path)
-        burst_plot_dir = args.save_plot_dir.resolve() / direction / "bursts"
-        for row in rows:
-            burst_name = (
-                f"burst_{int(row['burst_index']):03d}"
-                f"_f{int(row['freq_index']):02d}"
-                f"_r{int(row['repeat_index'])}.png"
-            )
-            plot_burst_samples(capture, row, burst_plot_dir / burst_name, direction)
-        result["burst_plot_dir"] = str(burst_plot_dir)
+        if not args.no_burst_plots:
+            burst_plot_dir = args.save_plot_dir.resolve() / direction / "bursts"
+            plot_tasks: list[tuple[np.ndarray, dict[str, Any], str, str]] = []
+            for row in rows:
+                burst_name = (
+                    f"burst_{int(row['burst_index']):03d}"
+                    f"_f{int(row['freq_index']):02d}"
+                    f"_r{int(row['repeat_index'])}.png"
+                )
+                start = int(row["segment_start"])
+                stop = int(row["segment_stop"])
+                plot_tasks.append((capture[start:stop], row, str(burst_plot_dir / burst_name), direction))
+            worker_count = max(1, int(args.jobs))
+            if worker_count > 1 and len(plot_tasks) > 1:
+                worker_count = min(worker_count, len(plot_tasks))
+                chunksize = max(1, len(plot_tasks) // (worker_count * 4))
+                with ProcessPoolExecutor(max_workers=worker_count) as executor:
+                    list(executor.map(_plot_burst_samples_task, plot_tasks, chunksize=chunksize))
+            else:
+                for task in plot_tasks:
+                    _plot_burst_samples_task(task)
+            result["burst_plot_dir"] = str(burst_plot_dir)
 
     return result
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze continuous file-sink captures")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="JSON 配置文件路径；默认读取 continuous_capture_config.json")
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT)
     parser.add_argument("--reflector-file", type=Path, default=None)
     parser.add_argument("--initiator-file", type=Path, default=None)
@@ -1026,25 +1167,137 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--sample-rate", type=float, default=1e6)
     parser.add_argument("--smooth-len", type=int, default=64)
-    parser.add_argument("--threshold-ratio", type=float, default=0.35)
+    parser.add_argument("--threshold-ratio", type=float, default=0.005)
     parser.add_argument("--gap-tolerance", type=int, default=48)
     parser.add_argument("--min-segment-len", type=int, default=64)
     parser.add_argument("--edge-trim-samples", type=int, default=16, help="在稳定 core 基础上额外丢弃每个 burst 头尾各 N 个样本")
+    parser.add_argument("--jobs", type=int, default=0, help="并行分析 worker 数；0 表示自动使用 CPU 核数")
+    parser.add_argument("--no-burst-plots", action="store_true", help="不保存每个 burst 的单独 PNG，只保存总览图和 CSV/JSON")
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot-dir", type=Path, default=None)
     parser.add_argument("--save-pair-csv", type=Path, default=None)
     parser.add_argument("--save-pair-angle-csv", type=Path, default=None)
+    parser.add_argument("--capture-group", default="all", help="要分析的采集组 label；默认 all。配置文件里当前默认有 2m 和 4m")
+    parser.add_argument("--no-distance-estimates", action="store_true", help="只做 burst 分析，不生成两种距离估计结果")
+    parser.add_argument("--distance-min-m", type=float, default=0.0, help="兼容旧配置；当前 phase-match 改为围绕斜率距离局部搜索")
+    parser.add_argument("--distance-max-m", type=float, default=20.0, help="兼容旧配置；当前 phase-match 改为围绕斜率距离局部搜索")
+    parser.add_argument("--distance-step-m", type=float, default=0.01, help="phase-match 距离搜索步进")
+    parser.add_argument("--match-window-m", type=float, default=10.0, help="phase-match 围绕线性斜率距离的搜索半窗口")
+    parser.add_argument("--propagation-speed-mps", type=float, default=2.3e8, help="传播速度，默认 2.3e8 m/s（铜质有线测量）")
+    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.2, help="线性拟合 unwrap 时允许相邻频点小幅上升的容差")
     return parser
 
 
-def main() -> None:
-    parser = build_argument_parser()
-    args = parser.parse_args()
-    root = resolve_root(args.root)
-    default_reflector_file, default_initiator_file = default_capture_paths(root)
-    reflector_file = default_reflector_file if args.reflector_file is None else args.reflector_file.resolve()
-    initiator_file = default_initiator_file if args.initiator_file is None else args.initiator_file.resolve()
+def add_distance_estimates(
+    result: dict[str, Any],
+    args: argparse.Namespace,
+    pair_phase_rows: list[dict[str, Any]],
+    initiator_rows: list[dict[str, Any]],
+    reflector_rows: list[dict[str, Any]],
+) -> None:
+    """Run both distance estimators from already detected pair rows."""
+    from estimate_distance_continuous import (
+        estimate_distance_from_pair_rows,
+        save_estimate_plot,
+        save_side_phase_plot,
+    )
+    from estimate_distance_continuous_phase_match import (
+        estimate_distance_phase_match_from_pair_rows,
+        save_phase_match_plot,
+    )
 
+    estimate_args = argparse.Namespace(**vars(args))
+    estimate_args.pair_csv = None
+    plot_dir = args.save_plot_dir.resolve()
+
+    estimates: dict[str, Any] = {}
+
+    try:
+        linear_result = estimate_distance_from_pair_rows(pair_phase_rows, estimate_args, source="analyze")
+        linear_plot_path = plot_dir / "distance_linear_fit.png"
+        save_estimate_plot(linear_result, linear_plot_path)
+        linear_json_path = plot_dir / "distance_linear_fit.json"
+        linear_json_path.write_text(json.dumps(linear_result, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        initiator_phase_plot = plot_dir / "initiator_phase_by_freq.png"
+        reflector_phase_plot = plot_dir / "reflector_phase_by_freq.png"
+        save_side_phase_plot("initiator", average_rows_by_freq(initiator_rows), initiator_phase_plot)
+        save_side_phase_plot("reflector", average_rows_by_freq(reflector_rows), reflector_phase_plot)
+
+        linear_result["plot_path"] = str(linear_plot_path)
+        linear_result["json_path"] = str(linear_json_path)
+        linear_result["initiator_phase_plot_path"] = str(initiator_phase_plot)
+        linear_result["reflector_phase_plot_path"] = str(reflector_phase_plot)
+        estimates["linear_fit"] = linear_result
+        print(f"linear_distance_m: {linear_result['distance_m']}")
+        print(f"saved_linear_distance_plot: {linear_plot_path}")
+        print(f"saved_linear_distance_json: {linear_json_path}")
+    except SystemExit as exc:
+        estimates["linear_fit"] = {"error": str(exc)}
+        print(f"linear_distance_error: {exc}")
+
+    try:
+        phase_match_result = estimate_distance_phase_match_from_pair_rows(pair_phase_rows, estimate_args, source="analyze")
+        phase_match_plot_path = plot_dir / "distance_phase_match.png"
+        save_phase_match_plot(phase_match_result, phase_match_plot_path)
+        phase_match_json_path = plot_dir / "distance_phase_match.json"
+        phase_match_json_path.write_text(json.dumps(phase_match_result, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        phase_match_result["plot_path"] = str(phase_match_plot_path)
+        phase_match_result["json_path"] = str(phase_match_json_path)
+        estimates["phase_match"] = phase_match_result
+        print(f"phase_match_distance_m: {phase_match_result['distance_m']}")
+        print(f"saved_phase_match_plot: {phase_match_plot_path}")
+        print(f"saved_phase_match_json: {phase_match_json_path}")
+    except SystemExit as exc:
+        estimates["phase_match"] = {"error": str(exc)}
+        print(f"phase_match_error: {exc}")
+
+    result["distance_estimates"] = estimates
+
+
+def print_distance_summary(result: dict[str, Any], *, disabled: bool) -> None:
+    """在主输出尾部固定打印两种测距结果，避免被中间日志淹没。"""
+    if disabled:
+        print("distance_summary: disabled_by_no_distance_estimates")
+        return
+
+    estimates = result.get("distance_estimates")
+    if not isinstance(estimates, dict):
+        print("distance_summary: unavailable")
+        return
+
+    linear = estimates.get("linear_fit") if isinstance(estimates.get("linear_fit"), dict) else None
+    phase_match = estimates.get("phase_match") if isinstance(estimates.get("phase_match"), dict) else None
+
+    if linear is None:
+        print("distance_linear_fit_m: unavailable")
+    elif "distance_m" in linear:
+        print(f"distance_linear_fit_m: {float(linear['distance_m'])}")
+    else:
+        print(f"distance_linear_fit_m: error ({linear.get('error', 'unknown')})")
+
+    if phase_match is None:
+        print("distance_phase_match_m: unavailable")
+    elif "distance_m" in phase_match:
+        print(f"distance_phase_match_m: {float(phase_match['distance_m'])}")
+    else:
+        print(f"distance_phase_match_m: error ({phase_match.get('error', 'unknown')})")
+
+
+def run_capture_analysis(
+    *,
+    args: argparse.Namespace,
+    root: Path,
+    capture_group: str,
+    capture_distance_m: Any,
+    reflector_file: Path,
+    initiator_file: Path,
+    save_plot_dir: Path,
+    save_pair_csv_path: Path | None,
+    save_pair_angle_csv_path: Path | None,
+    save_json: Path | None,
+) -> dict[str, Any]:
     expected_bursts = expected_burst_count(
         args.start_offset_hz,
         args.stop_offset_hz,
@@ -1052,37 +1305,70 @@ def main() -> None:
         args.repeats,
     )
 
-    if args.save_plot_dir is None:
-        args.save_plot_dir = default_plot_dir(root)
+    run_args = argparse.Namespace(**vars(args))
+    run_args.reflector_file = reflector_file
+    run_args.initiator_file = initiator_file
+    run_args.save_plot_dir = save_plot_dir
+    run_args.save_pair_csv = save_pair_csv_path
+    run_args.save_pair_angle_csv = save_pair_angle_csv_path
+    run_args.save_json = save_json
 
     result = {
         "root": str(root),
+        "capture_group": str(capture_group),
+        "capture_distance_m": capture_distance_m,
+        "config_path": args.loaded_config,
+        "reflector_file": str(reflector_file),
+        "initiator_file": str(initiator_file),
+        "analysis_parameters": {
+            "center_freq_hz": float(args.center_freq_hz),
+            "start_offset_hz": float(args.start_offset_hz),
+            "stop_offset_hz": float(args.stop_offset_hz),
+            "step_hz": float(args.step_hz),
+            "repeats": int(args.repeats),
+            "sample_rate": float(args.sample_rate),
+            "smooth_len": int(args.smooth_len),
+            "threshold_ratio": float(args.threshold_ratio),
+            "gap_tolerance": int(args.gap_tolerance),
+            "min_segment_len": int(args.min_segment_len),
+            "edge_trim_samples": int(args.edge_trim_samples),
+            "jobs": int(args.jobs),
+            "no_burst_plots": bool(args.no_burst_plots),
+        },
         "expected_burst_count": int(expected_bursts),
-        "reflector": analyze_one_capture("reflector", reflector_file, args),
-        "initiator": analyze_one_capture("initiator", initiator_file, args),
+        "reflector": analyze_one_capture("reflector", reflector_file, run_args),
+        "initiator": analyze_one_capture("initiator", initiator_file, run_args),
     }
 
-    pair_phase_plot_path = args.save_plot_dir.resolve() / "pair_phase_by_freq.png"
+    pair_phase_plot_path = run_args.save_plot_dir.resolve() / "pair_phase_by_freq.png"
     pair_phase_rows = plot_pair_phase_by_freq(
         result["reflector"]["rows"],
         result["initiator"]["rows"],
         pair_phase_plot_path,
     )
     pair_phase_csv_path = (
-        args.save_pair_csv.resolve()
-        if args.save_pair_csv is not None
-        else args.save_plot_dir.resolve() / "pair_phase_by_freq.csv"
+        run_args.save_pair_csv.resolve()
+        if run_args.save_pair_csv is not None
+        else run_args.save_plot_dir.resolve() / "pair_phase_by_freq.csv"
     )
     pair_angle_csv_path = (
-        args.save_pair_angle_csv.resolve()
-        if args.save_pair_angle_csv is not None
-        else args.save_plot_dir.resolve() / "pair_angle_by_freq.csv"
+        run_args.save_pair_angle_csv.resolve()
+        if run_args.save_pair_angle_csv is not None
+        else run_args.save_plot_dir.resolve() / "pair_angle_by_freq.csv"
     )
     save_pair_phase_csv(pair_phase_rows, pair_phase_csv_path)
     save_pair_angle_csv(pair_phase_rows, pair_angle_csv_path)
     expected_freq_count = int(round(float(expected_bursts) / float(args.repeats))) if args.repeats > 0 else 0
-    initiator_diag = build_side_freq_diagnostics(result["initiator"]["rows"], expected_freq_count=expected_freq_count)
-    reflector_diag = build_side_freq_diagnostics(result["reflector"]["rows"], expected_freq_count=expected_freq_count)
+    initiator_diag = build_side_freq_diagnostics(
+        result["initiator"]["rows"],
+        expected_freq_count=expected_freq_count,
+        expected_repeats=args.repeats,
+    )
+    reflector_diag = build_side_freq_diagnostics(
+        result["reflector"]["rows"],
+        expected_freq_count=expected_freq_count,
+        expected_repeats=args.repeats,
+    )
     pair_diag = build_pair_freq_diagnostics(initiator_diag, reflector_diag, pair_phase_rows)
     result["pair_phase_by_freq"] = pair_phase_rows
     result["pair_phase_plot_path"] = str(pair_phase_plot_path)
@@ -1092,25 +1378,19 @@ def main() -> None:
     result["reflector_freq_diagnostics"] = reflector_diag
     result["pair_freq_diagnostics"] = pair_diag
 
-    for name in ("reflector", "initiator"):
-        summary = result[name]["summary"]
-        print(f"{name}_raw_samples: {summary['raw_samples']}")
-        print(f"{name}_burst_count: {summary['burst_count']}")
-        print(f"{name}_expected_burst_count: {summary['expected_burst_count']}")
-        print(f"{name}_mean_segment_abs: {summary['mean_segment_abs']}")
-        print(f"{name}_mean_segment_coherence: {summary['mean_segment_coherence']}")
-        print(f"{name}_mean_segment_phase_std: {summary['mean_segment_phase_std']}")
-        print(f"{name}_trimmed_burst_count: {summary['trimmed_burst_count']}")
-        print(f"{name}_invalid_burst_count: {summary['invalid_burst_count']}")
-        print(f"{name}_assigned_burst_count: {summary['assigned_burst_count']}")
-    for side_name, diagnostics in (("initiator", initiator_diag), ("reflector", reflector_diag)):
-        for row in diagnostics:
-            freq_hz = row["freq_hz"]
-            freq_mhz = float(freq_hz) / 1e6 if freq_hz is not None else float(args.center_freq_hz + args.start_offset_hz + row["freq_index"] * args.step_hz) / 1e6
-            print(
-                f"{side_name}_freq_index: {row['freq_index']}, freq_mhz: {freq_mhz:.3f}, state: {row['state']}, "
-                f"valid_repeats: {row['valid_repeat_count']}, reason: {row['reason']}, summary: {summarize_freq_rows(row['rows'])}"
-            )
+    if not args.no_distance_estimates:
+        add_distance_estimates(
+            result,
+            run_args,
+            pair_phase_rows,
+            result["initiator"]["rows"],
+            result["reflector"]["rows"],
+        )
+
+    print(f"capture_group: {capture_group}")
+    print(f"capture_distance_m: {capture_distance_m}")
+    print(f"reflector_file: {reflector_file}")
+    print(f"initiator_file: {initiator_file}")
     for row in pair_diag:
         pair_row = row["pair_row"]
         if pair_row is None:
@@ -1128,15 +1408,100 @@ def main() -> None:
                 pair_abs=float(pair_row["pair_abs"]),
             )
         )
-    print(f"saved_plot_dir: {args.save_plot_dir.resolve()}")
+    print(f"saved_plot_dir: {run_args.save_plot_dir.resolve()}")
+    print(f"loaded_config: {args.loaded_config}")
     print(f"saved_pair_phase_plot: {pair_phase_plot_path}")
     print(f"saved_pair_phase_csv: {pair_phase_csv_path}")
     print(f"saved_pair_angle_csv: {pair_angle_csv_path}")
+    print_distance_summary(result, disabled=bool(args.no_distance_estimates))
 
-    if args.save_json is not None:
-        out_path = args.save_json.resolve()
+    if run_args.save_json is not None:
+        out_path = run_args.save_json.resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"saved_json: {out_path}")
+
+    return result
+
+
+def main() -> None:
+    parser = build_argument_parser()
+    config_args, _ = parser.parse_known_args()
+    config = load_config(config_args.config)
+    apply_config_defaults(parser, config)
+    args = parser.parse_args()
+    args.config = config_args.config
+    args.loaded_config = str((args.config if args.config.is_absolute() else (PROJECT_ROOT / args.config)).resolve()) if args.config is not None else None
+    if int(args.jobs) <= 0:
+        args.jobs = max(1, os.cpu_count() or 1)
+    root = resolve_root(args.root)
+
+    base_plot_dir = args.save_plot_dir.resolve() if args.save_plot_dir is not None else default_plot_dir(root)
+    explicit_files = args.reflector_file is not None or args.initiator_file is not None
+
+    run_specs: list[dict[str, Any]] = []
+    if explicit_files:
+        default_reflector_file, default_initiator_file = default_capture_paths(root)
+        reflector_file = default_reflector_file if args.reflector_file is None else args.reflector_file.resolve()
+        initiator_file = default_initiator_file if args.initiator_file is None else args.initiator_file.resolve()
+        label = str(args.capture_group) if str(args.capture_group) != "all" else "custom"
+        run_specs.append(
+            {
+                "label": label,
+                "distance_m": None,
+                "reflector_file": reflector_file,
+                "initiator_file": initiator_file,
+                "plot_dir": base_plot_dir,
+                "save_pair_csv": args.save_pair_csv,
+                "save_pair_angle_csv": args.save_pair_angle_csv,
+                "save_json": args.save_json,
+            }
+        )
+    else:
+        groups = capture_group_specs(config)
+        selected_label = str(args.capture_group)
+        if selected_label != "all":
+            groups = [group for group in groups if str(group["label"]) == selected_label]
+            if not groups:
+                raise SystemExit(f"找不到 capture_group: {selected_label}")
+        single_config_group = selected_label != "all"
+
+        for group in groups:
+            label = str(group["label"])
+            run_specs.append(
+                {
+                    "label": label,
+                    "distance_m": group.get("distance_m"),
+                    "reflector_file": resolve_group_file(root, group["reflector_file"]),
+                    "initiator_file": resolve_group_file(root, group["initiator_file"]),
+                    "plot_dir": base_plot_dir / label,
+                    "save_pair_csv": args.save_pair_csv if single_config_group else None,
+                    "save_pair_angle_csv": args.save_pair_angle_csv if single_config_group else None,
+                    "save_json": args.save_json if single_config_group else None,
+                }
+            )
+
+    all_results: list[dict[str, Any]] = []
+    for spec in run_specs:
+        all_results.append(
+            run_capture_analysis(
+                args=args,
+                root=root,
+                capture_group=spec["label"],
+                capture_distance_m=spec["distance_m"],
+                reflector_file=spec["reflector_file"],
+                initiator_file=spec["initiator_file"],
+                save_plot_dir=spec["plot_dir"],
+                save_pair_csv_path=spec["save_pair_csv"],
+                save_pair_angle_csv_path=spec["save_pair_angle_csv"],
+                save_json=spec["save_json"],
+            )
+        )
+
+    if not explicit_files and args.save_json is not None and len(run_specs) > 1:
+        out_path = args.save_json.resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps({"root": str(root), "results": all_results}, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"saved_json: {out_path}")
 
 

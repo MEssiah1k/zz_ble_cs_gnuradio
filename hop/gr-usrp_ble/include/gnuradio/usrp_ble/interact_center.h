@@ -32,12 +32,24 @@ namespace gr {
        * class. usrp_ble::interact_center::make is the public interface for
        * creating new instances.
        */
-      static sptr make(int sample_rate, bool start_btn, bool stop_btn, float wait_time_ms, int repeat_total);
+      static sptr make(int sample_rate,
+                       bool start_btn,
+                       bool stop_btn,
+                       float wait_time_ms,
+                       int repeat_total,
+                       int start_freq_index,
+                       int stop_freq_index,
+                       double step_hz,
+                       int capture_groups = 1);
       
       virtual void set_start_btn(bool start_btn) = 0;
       virtual void set_stop_btn(bool stop_btn) = 0;
       virtual void set_wait_time_ms(float wait_time_ms) = 0;
       virtual void set_use_msg_clock(bool use_msg_clock) = 0;
+      virtual void set_start_freq_index(int start_freq_index) = 0;
+      virtual void set_stop_freq_index(int stop_freq_index) = 0;
+      virtual void set_step_hz(double step_hz) = 0;
+      virtual void set_capture_groups(int capture_groups) = 0;
     };
 
   } // namespace usrp_ble

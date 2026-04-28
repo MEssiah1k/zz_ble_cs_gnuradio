@@ -213,6 +213,10 @@ def summarize_complex_signal(x: np.ndarray) -> dict[str, Any]:
         "mean_power": 0.0,
         "mean_phase": 0.0,
         "phase_std": 0.0,
+        "coherence": 0.0,
+        "cluster_phase_std": 0.0,
+        "cluster_phase_p95_abs": 0.0,
+        "cluster_phase_max_abs": 0.0,
         "classification": "empty",
     }
     if x.size == 0:
@@ -320,10 +324,10 @@ def scan_directory(dir_path: Path, outlier_mad_scale: float) -> list[dict[str, A
                     "mean_power": summary["mean_power"],
                     "mean_phase": summary["mean_phase"],
                     "phase_std": summary["phase_std"],
-                    "coherence": summary["coherence"],
-                    "cluster_phase_std": summary["cluster_phase_std"],
-                    "cluster_phase_p95_abs": summary["cluster_phase_p95_abs"],
-                    "cluster_phase_max_abs": summary["cluster_phase_max_abs"],
+                    "coherence": summary.get("coherence", 0.0),
+                    "cluster_phase_std": summary.get("cluster_phase_std", 0.0),
+                    "cluster_phase_p95_abs": summary.get("cluster_phase_p95_abs", 0.0),
+                    "cluster_phase_max_abs": summary.get("cluster_phase_max_abs", 0.0),
                     "classification": summary["classification"],
                     **robust_summary,
                 }
@@ -371,15 +375,11 @@ def print_directory_report(records: list[dict[str, Any]]) -> None:
     for row in records:
         brief = {
             "file": row["file"],
-            "freq_index": row.get("freq_index"),
-            "repeat_index": row.get("repeat_index"),
             "ok": row["ok"],
             "samples": row["samples"],
             "classification": row.get("classification", ""),
             "mean_abs": row.get("mean_abs", 0.0),
             "outlier_samples": row.get("outlier_samples", 0),
-            "robust_mean_i": row.get("robust_mean_i", 0.0),
-            "robust_mean_q": row.get("robust_mean_q", 0.0),
             "robust_mean_phase": row.get("robust_mean_phase", 0.0),
         }
         print(json.dumps(brief, ensure_ascii=False))
@@ -530,8 +530,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--qualified-min-robust-abs",
         type=float,
-        default=0.8,
-        help="满足要求时单次记录的 robust_mean_abs 下限",
+        default=0.0,
+        help="满足要求时单次记录的 robust_mean_abs 下限；默认 0 表示不按绝对幅度过滤，因为幅度取决于 TX/RX 增益和链路损耗",
     )
     parser.add_argument(
         "--qualified-min-valid-repeats",

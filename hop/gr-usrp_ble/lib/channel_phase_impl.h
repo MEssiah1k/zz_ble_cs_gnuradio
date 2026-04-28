@@ -20,13 +20,15 @@ class channel_phase_impl : public channel_phase
 private:
     static constexpr double SPEED_OF_LIGHT = 299792458.0;
 
-    double d_center_freq_hz;
+    double d_base_center_freq_hz;
+    double d_msg_freq_offset_hz;
     double d_distance_m;
     float d_amplitude;
     gr_complex d_channel_rot;
     std::mutex d_mutex;
 
     void update_channel_rot_locked();
+    void handle_freq_msg(pmt::pmt_t msg);
 
 public:
     channel_phase_impl(double center_freq_hz, double distance_m, float amplitude);

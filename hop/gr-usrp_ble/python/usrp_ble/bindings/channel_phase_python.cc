@@ -14,7 +14,7 @@
 /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
 /* BINDTOOL_USE_PYGCCXML(0)                                                        */
 /* BINDTOOL_HEADER_FILE(channel_phase.h)                                        */
-/* BINDTOOL_HEADER_FILE_HASH(d1af55dcf6ae9a28bae1bc0d6cbc84f7)                     */
+/* BINDTOOL_HEADER_FILE_HASH(24b62bbc12d6535c157be4e7474e5d10)                     */
 /***********************************************************************************/
 
 #include <pybind11/complex.h>

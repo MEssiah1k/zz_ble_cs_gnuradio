@@ -6,6 +6,7 @@
 #
 # GNU Radio Python Flow Graph
 # Title: Not titled yet
+# Author: lfy
 # GNU Radio version: 3.10.7.0
 
 from packaging.version import Version as StrictVersion
@@ -23,12 +24,16 @@ from PyQt5 import Qt
 from argparse import ArgumentParser
 from gnuradio.eng_arg import eng_float, intx
 from gnuradio import eng_notation
+from gnuradio import uhd
+import time
 from gnuradio import usrp_ble
+from gnuradio.qtgui import Range, RangeWidget
+from PyQt5 import QtCore
 import sip
 
 
 
-class ble_cs_self(gr.top_block, Qt.QWidget):
+class ble_cs_1to1(gr.top_block, Qt.QWidget):
 
     def __init__(self):
         gr.top_block.__init__(self, "Not titled yet", catch_exceptions=True)
@@ -51,7 +56,7 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         self.top_grid_layout = Qt.QGridLayout()
         self.top_layout.addLayout(self.top_grid_layout)
 
-        self.settings = Qt.QSettings("GNU Radio", "ble_cs_self")
+        self.settings = Qt.QSettings("GNU Radio", "ble_cs_1to1")
 
         try:
             if StrictVersion(Qt.qVersion()) < StrictVersion("5.0.0"):
@@ -64,10 +69,18 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
+        self.wait_time_ms = wait_time_ms = 100
+        self.store_lead_ms = store_lead_ms = 0
+        self.stop_freq_index = stop_freq_index = 40
         self.stop_button = stop_button = 0
+        self.step_hz = step_hz = 1e5
+        self.start_freq_index = start_freq_index = -40
         self.start_button = start_button = 0
+        self.settle_time_ms = settle_time_ms = 5
+        self.send_gain = send_gain = 0
         self.samp_rate = samp_rate = 10e6
-        self.distance_m = distance_m = 3
+        self.repeat_total = repeat_total = 2
+        self.recv_gain = recv_gain = 0
         self.centetr_fre = centetr_fre = 2.44e9
 
         ##################################################
@@ -86,16 +99,65 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         _start_button_push_button.pressed.connect(lambda: self.set_start_button(self._start_button_choices['Pressed']))
         _start_button_push_button.released.connect(lambda: self.set_start_button(self._start_button_choices['Released']))
         self.top_layout.addWidget(_start_button_push_button)
-        self.usrp_ble_interact_center_0 = usrp_ble.interact_center(int(samp_rate), start_button, stop_button, 100, 2, (-40), 40, 1e5, 0.0, 0)
+        self._send_gain_range = Range(0, 20, 1, 0, 200)
+        self._send_gain_win = RangeWidget(self._send_gain_range, self.set_send_gain, "'send_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
+        self.top_layout.addWidget(self._send_gain_win)
+        self._recv_gain_range = Range(0, 20, 1, 0, 200)
+        self._recv_gain_win = RangeWidget(self._recv_gain_range, self.set_recv_gain, "'recv_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
+        self.top_layout.addWidget(self._recv_gain_win)
+        self.usrp_ble_interact_center_0 = usrp_ble.interact_center(int(samp_rate), start_button, stop_button, wait_time_ms, repeat_total, start_freq_index, stop_freq_index, step_hz, settle_time_ms, store_lead_ms)
         self.usrp_ble_interact_center_0.set_use_msg_clock(False)
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_data_send_0 = usrp_ble.data_send(samp_rate, 0.001)
-        self.usrp_ble_channel_phase_1 = usrp_ble.channel_phase(centetr_fre, distance_m, 1.0)
-        self.usrp_ble_channel_phase_0 = usrp_ble.channel_phase(centetr_fre, distance_m, 1.0)
         self.usrp_ble_capture_gate_0_0 = usrp_ble.capture_gate(1)
         self.usrp_ble_capture_gate_0 = usrp_ble.capture_gate(1)
+        self.uhd_usrp_source_0_0 = uhd.usrp_source(
+            ",".join(("addr=192.168.40.2", "recv_frame_size=8000,num_recv_frames=512")),
+            uhd.stream_args(
+                cpu_format="fc32",
+                otw_format="sc16",
+                args='',
+                channels=list(range(0,2)),
+            ),
+        )
+        self.uhd_usrp_source_0_0.set_subdev_spec('A:0 B:0', 0)
+        self.uhd_usrp_source_0_0.set_samp_rate(samp_rate)
+        self.uhd_usrp_source_0_0.set_time_unknown_pps(uhd.time_spec(0))
+
+        self.uhd_usrp_source_0_0.set_center_freq(centetr_fre, 0)
+        self.uhd_usrp_source_0_0.set_antenna("RX2", 0)
+        self.uhd_usrp_source_0_0.set_bandwidth(samp_rate, 0)
+        self.uhd_usrp_source_0_0.set_gain(recv_gain, 0)
+
+        self.uhd_usrp_source_0_0.set_center_freq(centetr_fre, 1)
+        self.uhd_usrp_source_0_0.set_antenna("RX2", 1)
+        self.uhd_usrp_source_0_0.set_bandwidth(samp_rate, 1)
+        self.uhd_usrp_source_0_0.set_gain(recv_gain, 1)
+        self.uhd_usrp_sink_0_0_0_0 = uhd.usrp_sink(
+            ",".join(("addr=192.168.40.2", "send_frame_size=8000,num_send_frames=512")),
+            uhd.stream_args(
+                cpu_format="fc32",
+                otw_format="sc16",
+                args='',
+                channels=list(range(0,2)),
+            ),
+            "",
+        )
+        self.uhd_usrp_sink_0_0_0_0.set_subdev_spec('A:0 B:0', 0)
+        self.uhd_usrp_sink_0_0_0_0.set_samp_rate(samp_rate)
+        self.uhd_usrp_sink_0_0_0_0.set_time_unknown_pps(uhd.time_spec(0))
+
+        self.uhd_usrp_sink_0_0_0_0.set_center_freq(centetr_fre, 0)
+        self.uhd_usrp_sink_0_0_0_0.set_antenna('TX/RX', 0)
+        self.uhd_usrp_sink_0_0_0_0.set_bandwidth(samp_rate, 0)
+        self.uhd_usrp_sink_0_0_0_0.set_gain(send_gain, 0)
+
+        self.uhd_usrp_sink_0_0_0_0.set_center_freq(centetr_fre, 1)
+        self.uhd_usrp_sink_0_0_0_0.set_antenna('TX/RX', 1)
+        self.uhd_usrp_sink_0_0_0_0.set_bandwidth(samp_rate, 1)
+        self.uhd_usrp_sink_0_0_0_0.set_gain(send_gain, 1)
         self.qtgui_freq_sink_x_0 = qtgui.freq_sink_c(
-            8192, #size
+            1024, #size
             window.WIN_BLACKMAN_hARRIS, #wintype
             0, #fc
             samp_rate, #bw
@@ -136,20 +198,20 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
 
         self._qtgui_freq_sink_x_0_win = sip.wrapinstance(self.qtgui_freq_sink_x_0.qwidget(), Qt.QWidget)
         self.top_layout.addWidget(self._qtgui_freq_sink_x_0_win)
-        self.blocks_throttle2_1_0 = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
-        self.blocks_throttle2_1 = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
-        self.blocks_throttle2_0 = blocks.throttle( gr.sizeof_gr_complex*1, samp_rate, True, 0 if "auto" == "auto" else max( int(float(0.1) * samp_rate) if "auto" == "time" else int(0.1), 1) )
         self.blocks_multiply_xx_0_0 = blocks.multiply_vcc(1)
         self.blocks_multiply_xx_0 = blocks.multiply_vcc(1)
         self.blocks_multiply_conjugate_cc_0_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_multiply_conjugate_cc_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_message_debug_0 = blocks.message_debug(True, gr.log_levels.info)
+        self.blocks_file_sink_1_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector2_g2', False)
+        self.blocks_file_sink_1_0.set_unbuffered(False)
+        self.blocks_file_sink_1 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator2_g2', False)
+        self.blocks_file_sink_1.set_unbuffered(False)
         self.blocks_file_sink_0_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector2', False)
         self.blocks_file_sink_0_0.set_unbuffered(False)
         self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator2', False)
         self.blocks_file_sink_0.set_unbuffered(False)
-        self.analog_sig_source_x_0_1 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, (-40e5), 1, 0, 0)
-        self.analog_sig_source_x_0 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, 1000, 1, 0, 0)
+        self.analog_sig_source_x_0_1 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, (start_freq_index*step_hz), 1, 0, 0)
 
 
         ##################################################
@@ -159,38 +221,56 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.blocks_message_debug_0, 'print'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_0, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_0_0, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_channel_phase_0, 'freq'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_channel_phase_1, 'freq'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send1_ctrl'), (self.usrp_ble_data_send_0, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send2_ctrl'), (self.usrp_ble_data_send_0_0, 'command'))
-        self.connect((self.analog_sig_source_x_0, 0), (self.blocks_throttle2_1_0, 0))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_conjugate_cc_0, 1))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_conjugate_cc_0_0, 1))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0, 0))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0_0, 0))
+        self.connect((self.analog_sig_source_x_0_1, 0), (self.qtgui_freq_sink_x_0, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_0, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_0_0, 0))
-        self.connect((self.blocks_multiply_xx_0, 0), (self.qtgui_freq_sink_x_0, 0))
-        self.connect((self.blocks_multiply_xx_0, 0), (self.usrp_ble_channel_phase_0, 0))
-        self.connect((self.blocks_multiply_xx_0_0, 0), (self.usrp_ble_channel_phase_1, 0))
-        self.connect((self.blocks_throttle2_0, 0), (self.blocks_multiply_xx_0_0, 1))
-        self.connect((self.blocks_throttle2_1, 0), (self.blocks_multiply_xx_0, 1))
-        self.connect((self.blocks_throttle2_1_0, 0), (self.usrp_ble_interact_center_0, 0))
+        self.connect((self.blocks_multiply_xx_0, 0), (self.uhd_usrp_sink_0_0_0_0, 0))
+        self.connect((self.blocks_multiply_xx_0_0, 0), (self.uhd_usrp_sink_0_0_0_0, 1))
+        self.connect((self.uhd_usrp_source_0_0, 1), (self.blocks_multiply_conjugate_cc_0, 0))
+        self.connect((self.uhd_usrp_source_0_0, 0), (self.blocks_multiply_conjugate_cc_0_0, 0))
         self.connect((self.usrp_ble_capture_gate_0, 0), (self.blocks_file_sink_0, 0))
+        self.connect((self.usrp_ble_capture_gate_0, 0), (self.blocks_file_sink_1, 0))
         self.connect((self.usrp_ble_capture_gate_0_0, 0), (self.blocks_file_sink_0_0, 0))
-        self.connect((self.usrp_ble_channel_phase_0, 0), (self.blocks_multiply_conjugate_cc_0, 0))
-        self.connect((self.usrp_ble_channel_phase_1, 0), (self.blocks_multiply_conjugate_cc_0_0, 0))
-        self.connect((self.usrp_ble_data_send_0, 0), (self.blocks_throttle2_1, 0))
-        self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_throttle2_0, 0))
+        self.connect((self.usrp_ble_capture_gate_0_0, 0), (self.blocks_file_sink_1_0, 0))
+        self.connect((self.usrp_ble_data_send_0, 0), (self.blocks_multiply_xx_0, 1))
+        self.connect((self.usrp_ble_data_send_0, 0), (self.usrp_ble_interact_center_0, 0))
+        self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_multiply_xx_0_0, 1))
 
 
     def closeEvent(self, event):
-        self.settings = Qt.QSettings("GNU Radio", "ble_cs_self")
+        self.settings = Qt.QSettings("GNU Radio", "ble_cs_1to1")
         self.settings.setValue("geometry", self.saveGeometry())
         self.stop()
         self.wait()
 
         event.accept()
+
+    def get_wait_time_ms(self):
+        return self.wait_time_ms
+
+    def set_wait_time_ms(self, wait_time_ms):
+        self.wait_time_ms = wait_time_ms
+        self.usrp_ble_interact_center_0.set_wait_time_ms(self.wait_time_ms)
+
+    def get_store_lead_ms(self):
+        return self.store_lead_ms
+
+    def set_store_lead_ms(self, store_lead_ms):
+        self.store_lead_ms = store_lead_ms
+        self.usrp_ble_interact_center_0.set_store_lead_ms(self.store_lead_ms)
+
+    def get_stop_freq_index(self):
+        return self.stop_freq_index
+
+    def set_stop_freq_index(self, stop_freq_index):
+        self.stop_freq_index = stop_freq_index
+        self.usrp_ble_interact_center_0.set_stop_freq_index(self.stop_freq_index)
 
     def get_stop_button(self):
         return self.stop_button
@@ -199,6 +279,22 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         self.stop_button = stop_button
         self.usrp_ble_interact_center_0.set_stop_btn(self.stop_button)
 
+    def get_step_hz(self):
+        return self.step_hz
+
+    def set_step_hz(self, step_hz):
+        self.step_hz = step_hz
+        self.analog_sig_source_x_0_1.set_frequency((self.start_freq_index*self.step_hz))
+        self.usrp_ble_interact_center_0.set_step_hz(self.step_hz)
+
+    def get_start_freq_index(self):
+        return self.start_freq_index
+
+    def set_start_freq_index(self, start_freq_index):
+        self.start_freq_index = start_freq_index
+        self.analog_sig_source_x_0_1.set_frequency((self.start_freq_index*self.step_hz))
+        self.usrp_ble_interact_center_0.set_start_freq_index(self.start_freq_index)
+
     def get_start_button(self):
         return self.start_button
 
@@ -206,40 +302,65 @@ class ble_cs_self(gr.top_block, Qt.QWidget):
         self.start_button = start_button
         self.usrp_ble_interact_center_0.set_start_btn(self.start_button)
 
+    def get_settle_time_ms(self):
+        return self.settle_time_ms
+
+    def set_settle_time_ms(self, settle_time_ms):
+        self.settle_time_ms = settle_time_ms
+        self.usrp_ble_interact_center_0.set_settle_time_ms(self.settle_time_ms)
+
+    def get_send_gain(self):
+        return self.send_gain
+
+    def set_send_gain(self, send_gain):
+        self.send_gain = send_gain
+        self.uhd_usrp_sink_0_0_0_0.set_gain(self.send_gain, 0)
+        self.uhd_usrp_sink_0_0_0_0.set_gain(self.send_gain, 1)
+
     def get_samp_rate(self):
         return self.samp_rate
 
     def set_samp_rate(self, samp_rate):
         self.samp_rate = samp_rate
-        self.analog_sig_source_x_0.set_sampling_freq(self.samp_rate)
         self.analog_sig_source_x_0_1.set_sampling_freq(self.samp_rate)
-        self.blocks_throttle2_0.set_sample_rate(self.samp_rate)
-        self.blocks_throttle2_1.set_sample_rate(self.samp_rate)
-        self.blocks_throttle2_1_0.set_sample_rate(self.samp_rate)
         self.qtgui_freq_sink_x_0.set_frequency_range(0, self.samp_rate)
+        self.uhd_usrp_sink_0_0_0_0.set_samp_rate(self.samp_rate)
+        self.uhd_usrp_sink_0_0_0_0.set_bandwidth(self.samp_rate, 0)
+        self.uhd_usrp_sink_0_0_0_0.set_bandwidth(self.samp_rate, 1)
+        self.uhd_usrp_source_0_0.set_samp_rate(self.samp_rate)
+        self.uhd_usrp_source_0_0.set_bandwidth(self.samp_rate, 0)
+        self.uhd_usrp_source_0_0.set_bandwidth(self.samp_rate, 1)
         self.usrp_ble_data_send_0.set_sample_rate(self.samp_rate)
         self.usrp_ble_data_send_0_0.set_sample_rate(self.samp_rate)
 
-    def get_distance_m(self):
-        return self.distance_m
+    def get_repeat_total(self):
+        return self.repeat_total
 
-    def set_distance_m(self, distance_m):
-        self.distance_m = distance_m
-        self.usrp_ble_channel_phase_0.set_distance_m(self.distance_m)
-        self.usrp_ble_channel_phase_1.set_distance_m(self.distance_m)
+    def set_repeat_total(self, repeat_total):
+        self.repeat_total = repeat_total
+
+    def get_recv_gain(self):
+        return self.recv_gain
+
+    def set_recv_gain(self, recv_gain):
+        self.recv_gain = recv_gain
+        self.uhd_usrp_source_0_0.set_gain(self.recv_gain, 0)
+        self.uhd_usrp_source_0_0.set_gain(self.recv_gain, 1)
 
     def get_centetr_fre(self):
         return self.centetr_fre
 
     def set_centetr_fre(self, centetr_fre):
         self.centetr_fre = centetr_fre
-        self.usrp_ble_channel_phase_0.set_center_freq_hz(self.centetr_fre)
-        self.usrp_ble_channel_phase_1.set_center_freq_hz(self.centetr_fre)
+        self.uhd_usrp_sink_0_0_0_0.set_center_freq(self.centetr_fre, 0)
+        self.uhd_usrp_sink_0_0_0_0.set_center_freq(self.centetr_fre, 1)
+        self.uhd_usrp_source_0_0.set_center_freq(self.centetr_fre, 0)
+        self.uhd_usrp_source_0_0.set_center_freq(self.centetr_fre, 1)
 
 
 
 
-def main(top_block_cls=ble_cs_self, options=None):
+def main(top_block_cls=ble_cs_1to1, options=None):
 
     if StrictVersion("4.5.0") <= StrictVersion(Qt.qVersion()) < StrictVersion("5.0.0"):
         style = gr.prefs().get_string('qtgui', 'style', 'raster')

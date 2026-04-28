@@ -14,7 +14,7 @@
 /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
 /* BINDTOOL_USE_PYGCCXML(0)                                                        */
 /* BINDTOOL_HEADER_FILE(interact_center.h)                                        */
-/* BINDTOOL_HEADER_FILE_HASH(f255bd35e9c4b181ee037762375c4880)                     */
+/* BINDTOOL_HEADER_FILE_HASH(21b8b191898926e81f7cf05226bdc11f)                     */
 /***********************************************************************************/
 
 #include <pybind11/complex.h>
@@ -43,6 +43,10 @@ void bind_interact_center(py::module& m)
            py::arg("stop_btn"),
            py::arg("wait_time_ms"),
            py::arg("repeat_total"),
+           py::arg("start_freq_index") = -40,
+           py::arg("stop_freq_index") = 40,
+           py::arg("step_hz") = 1e6,
+           py::arg("capture_groups") = 1,
            D(interact_center,make)
         )
         .def("set_start_btn", &interact_center::set_start_btn,
@@ -61,6 +65,22 @@ void bind_interact_center(py::module& m)
             py::arg("use_msg_clock"),
             D(interact_center,set_use_msg_clock)
         )
+        .def("set_start_freq_index", &interact_center::set_start_freq_index,
+            py::arg("start_freq_index"),
+            D(interact_center,set_start_freq_index)
+        )
+        .def("set_stop_freq_index", &interact_center::set_stop_freq_index,
+            py::arg("stop_freq_index"),
+            D(interact_center,set_stop_freq_index)
+        )
+        .def("set_step_hz", &interact_center::set_step_hz,
+            py::arg("step_hz"),
+            D(interact_center,set_step_hz)
+        )
+        .def("set_capture_groups", &interact_center::set_capture_groups,
+            py::arg("capture_groups"),
+            D(interact_center,set_capture_groups)
+        )
         
 
 
@@ -71,7 +91,3 @@ void bind_interact_center(py::module& m)
 
 
 }
-
-
-
-

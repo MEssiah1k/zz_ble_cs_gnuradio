@@ -214,7 +214,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [112, 428.0]
+    coordinate: [72, 428.0]
     rotation: 0
     state: enabled
 - name: analog_sig_source_x_0_1_0
@@ -247,7 +247,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/mess1ah/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator2
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator2
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -255,7 +255,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1680, 452.0]
+    coordinate: [1672, 404.0]
     rotation: 0
     state: enabled
 - name: blocks_file_sink_0_0
@@ -265,7 +265,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/mess1ah/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector2
+    file: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector2
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -273,7 +273,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1488, 980.0]
+    coordinate: [1704, 852.0]
     rotation: 0
     state: enabled
 - name: blocks_message_debug_0
@@ -302,7 +302,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [960, 1024.0]
+    coordinate: [984, 1068.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0
@@ -318,7 +318,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1088, 752.0]
+    coordinate: [1080, 696.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0_0
@@ -334,7 +334,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1080, 896.0]
+    coordinate: [1072, 840.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0
@@ -370,7 +370,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [584, 784.0]
+    coordinate: [632, 824.0]
     rotation: 0
     state: enabled
 - name: blocks_throttle2_0
@@ -569,7 +569,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1672, 612.0]
+    coordinate: [1464, 692.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_capture_gate_0
@@ -585,7 +585,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1448, 464.0]
+    coordinate: [1440, 408.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_capture_gate_0_0
@@ -601,7 +601,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1264, 992.0]
+    coordinate: [1480, 856.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_channel_phase_0
@@ -619,7 +619,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [824, 652.0]
+    coordinate: [800, 676.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_channel_phase_0_0
@@ -637,7 +637,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [824, 804.0]
+    coordinate: [816, 820.0]
     rotation: 0
     state: enabled
 - name: usrp_ble_data_send_0
@@ -687,7 +687,7 @@ blocks:
     settle_time_ms: '30'
     start_btn: start_button
     start_freq_index: '-40'
-    step_hz: 1e4
+    step_hz: 1e6
     stop_btn: stop_button
     stop_freq_index: '40'
     wait_time_ms: '10'
@@ -728,4 +728,4 @@ connections:
 
 metadata:
   file_format: 1
-  grc_version: 3.10.9.2
+  grc_version: 3.10.7.0

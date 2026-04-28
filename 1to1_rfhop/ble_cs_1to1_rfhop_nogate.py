@@ -69,13 +69,13 @@ class ble_cs_1to1_rfhop_nogate(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
-        self.tone_freq = tone_freq = 0
+        self.tone_freq = tone_freq = 100e3
         self.hop_offset = hop_offset = -40e6
         self.stop_button = stop_button = 0
         self.start_button = start_button = 0
         self.send_gain = send_gain = 0
         self.samp_rate = samp_rate = 1e6
-        self.recv_gain = recv_gain = 18
+        self.recv_gain = recv_gain = 0
         self.display_decim = display_decim = 1
         self.centetr_fre = centetr_fre = 2.44e9 + hop_offset - tone_freq
 
@@ -98,16 +98,16 @@ class ble_cs_1to1_rfhop_nogate(gr.top_block, Qt.QWidget):
         self._send_gain_range = Range(0, 20, 1, 0, 200)
         self._send_gain_win = RangeWidget(self._send_gain_range, self.set_send_gain, "'send_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._send_gain_win)
-        self._recv_gain_range = Range(0, 20, 1, 18, 200)
+        self._recv_gain_range = Range(0, 20, 1, 0, 200)
         self._recv_gain_win = RangeWidget(self._recv_gain_range, self.set_recv_gain, "'recv_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._recv_gain_win)
-        self.usrp_ble_interact_center_rfhop_0 = usrp_ble.interact_center_rfhop(int(samp_rate), start_button, stop_button, 10, 5, 3)
+        self.usrp_ble_interact_center_rfhop_0 = usrp_ble.interact_center_rfhop(int(samp_rate), start_button, stop_button, 10, 30, 3, (-40), 40, 1)
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_data_send_0 = usrp_ble.data_send(samp_rate, 0.001)
-        self.usrp_ble_capture_gate_0_0 = usrp_ble.capture_gate(1)
-        self.usrp_ble_capture_gate_0 = usrp_ble.capture_gate(1)
+        self.usrp_ble_capture_gate_0_0 = usrp_ble.capture_gate(1, 0)
+        self.usrp_ble_capture_gate_0 = usrp_ble.capture_gate(1, 0)
         self.uhd_usrp_source_0_0 = uhd.usrp_source(
-            ",".join(("addr=192.168.30.2", "recv_frame_size=8000,num_recv_frames=512")),
+            ",".join(("addr=192.168.40.2", "recv_frame_size=8000,num_recv_frames=512")),
             uhd.stream_args(
                 cpu_format="fc32",
                 otw_format="sc16",
@@ -129,7 +129,7 @@ class ble_cs_1to1_rfhop_nogate(gr.top_block, Qt.QWidget):
         self.uhd_usrp_source_0_0.set_bandwidth(samp_rate, 1)
         self.uhd_usrp_source_0_0.set_gain(recv_gain, 1)
         self.uhd_usrp_sink_0_0_0_0 = uhd.usrp_sink(
-            ",".join(("addr=192.168.30.2", "send_frame_size=8000,num_send_frames=512")),
+            ",".join(("addr=192.168.40.2", "send_frame_size=8000,num_send_frames=512")),
             uhd.stream_args(
                 cpu_format="fc32",
                 otw_format="sc16",
@@ -151,57 +151,6 @@ class ble_cs_1to1_rfhop_nogate(gr.top_block, Qt.QWidget):
         self.uhd_usrp_sink_0_0_0_0.set_antenna('TX/RX', 1)
         self.uhd_usrp_sink_0_0_0_0.set_bandwidth(samp_rate, 1)
         self.uhd_usrp_sink_0_0_0_0.set_gain(send_gain, 1)
-        self.qtgui_time_sink_x_0 = qtgui.time_sink_c(
-            1024, #size
-            samp_rate, #samp_rate
-            "", #name
-            1, #number of inputs
-            None # parent
-        )
-        self.qtgui_time_sink_x_0.set_update_time(0.10)
-        self.qtgui_time_sink_x_0.set_y_axis(-1, 1)
-
-        self.qtgui_time_sink_x_0.set_y_label('Amplitude', "")
-
-        self.qtgui_time_sink_x_0.enable_tags(True)
-        self.qtgui_time_sink_x_0.set_trigger_mode(qtgui.TRIG_MODE_FREE, qtgui.TRIG_SLOPE_POS, 0.0, 0, 0, "")
-        self.qtgui_time_sink_x_0.enable_autoscale(False)
-        self.qtgui_time_sink_x_0.enable_grid(False)
-        self.qtgui_time_sink_x_0.enable_axis_labels(True)
-        self.qtgui_time_sink_x_0.enable_control_panel(False)
-        self.qtgui_time_sink_x_0.enable_stem_plot(False)
-
-
-        labels = ['Signal 1', 'Signal 2', 'Signal 3', 'Signal 4', 'Signal 5',
-            'Signal 6', 'Signal 7', 'Signal 8', 'Signal 9', 'Signal 10']
-        widths = [1, 1, 1, 1, 1,
-            1, 1, 1, 1, 1]
-        colors = ['blue', 'red', 'green', 'black', 'cyan',
-            'magenta', 'yellow', 'dark red', 'dark green', 'dark blue']
-        alphas = [1.0, 1.0, 1.0, 1.0, 1.0,
-            1.0, 1.0, 1.0, 1.0, 1.0]
-        styles = [1, 1, 1, 1, 1,
-            1, 1, 1, 1, 1]
-        markers = [-1, -1, -1, -1, -1,
-            -1, -1, -1, -1, -1]
-
-
-        for i in range(2):
-            if len(labels[i]) == 0:
-                if (i % 2 == 0):
-                    self.qtgui_time_sink_x_0.set_line_label(i, "Re{{Data {0}}}".format(i/2))
-                else:
-                    self.qtgui_time_sink_x_0.set_line_label(i, "Im{{Data {0}}}".format(i/2))
-            else:
-                self.qtgui_time_sink_x_0.set_line_label(i, labels[i])
-            self.qtgui_time_sink_x_0.set_line_width(i, widths[i])
-            self.qtgui_time_sink_x_0.set_line_color(i, colors[i])
-            self.qtgui_time_sink_x_0.set_line_style(i, styles[i])
-            self.qtgui_time_sink_x_0.set_line_marker(i, markers[i])
-            self.qtgui_time_sink_x_0.set_line_alpha(i, alphas[i])
-
-        self._qtgui_time_sink_x_0_win = sip.wrapinstance(self.qtgui_time_sink_x_0.qwidget(), Qt.QWidget)
-        self.top_layout.addWidget(self._qtgui_time_sink_x_0_win)
         self.qtgui_freq_sink_x_0_1_0 = qtgui.freq_sink_c(
             8192, #size
             window.WIN_BLACKMAN_hARRIS, #wintype
@@ -272,7 +221,6 @@ class ble_cs_1to1_rfhop_nogate(gr.top_block, Qt.QWidget):
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0, 0))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0_0, 0))
         self.connect((self.analog_sig_source_x_0_1_0, 0), (self.qtgui_freq_sink_x_0_1_0, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.qtgui_time_sink_x_0, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_0, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_0_0, 0))
         self.connect((self.blocks_multiply_xx_0, 0), (self.uhd_usrp_sink_0_0_0_0, 0))
@@ -338,7 +286,6 @@ class ble_cs_1to1_rfhop_nogate(gr.top_block, Qt.QWidget):
     def set_samp_rate(self, samp_rate):
         self.samp_rate = samp_rate
         self.analog_sig_source_x_0_1.set_sampling_freq(self.samp_rate)
-        self.qtgui_time_sink_x_0.set_samp_rate(self.samp_rate)
         self.uhd_usrp_sink_0_0_0_0.set_samp_rate(self.samp_rate)
         self.uhd_usrp_sink_0_0_0_0.set_bandwidth(self.samp_rate, 0)
         self.uhd_usrp_sink_0_0_0_0.set_bandwidth(self.samp_rate, 1)

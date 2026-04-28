@@ -338,7 +338,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--start-offset-hz", type=float, default=-40e6, help="freq_index=0 对应的频率偏移")
     parser.add_argument("--step-hz", type=float, default=1e6, help="相邻 freq_index 的频率步进")
     parser.add_argument("--min-valid-repeats", type=int, default=2, help="每个方向每个频点至少需要多少次有效重复")
-    parser.add_argument("--min-abs", type=float, default=0.8, help="单次重复平均复数幅度低于该值则判为无效")
+    parser.add_argument(
+        "--min-abs",
+        type=float,
+        default=0.0,
+        help="单次重复平均复数幅度低于该值则判为无效；默认 0 表示不按绝对幅度过滤，因为幅度取决于 TX/RX 增益和链路损耗",
+    )
     parser.add_argument(
         "--max-repeat-abs-spread",
         type=float,

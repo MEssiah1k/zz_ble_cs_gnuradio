@@ -82,7 +82,7 @@ blocks:
     start: '0'
     step: '1'
     stop: '20'
-    value: '18'
+    value: '0'
     widget: counter_slider
   states:
     bus_sink: false
@@ -162,7 +162,7 @@ blocks:
   id: variable
   parameters:
     comment: Fixed low-rate baseband tone. RF tone = USRP center + tone_freq.
-    value: '0'
+    value: 100e3
   states:
     bus_sink: false
     bus_source: false
@@ -249,7 +249,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2016, 1028.0]
+    coordinate: [2024, 1028.0]
     rotation: 0
     state: enabled
 - name: blocks_message_debug_0
@@ -605,9 +605,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2224, 644.0]
+    coordinate: [2048, 708.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: uhd_usrp_sink_0_0_0
   id: uhd_usrp_sink
   parameters:
@@ -996,7 +996,7 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dev_addr: '"addr=192.168.30.2"'
+    dev_addr: '"addr=192.168.40.2"'
     dev_args: '"send_frame_size=8000,num_send_frames=512"'
     gain0: send_gain
     gain1: send_gain
@@ -1773,7 +1773,7 @@ blocks:
     dc_offs_enb7: default
     dc_offs_enb8: default
     dc_offs_enb9: default
-    dev_addr: '"addr=192.168.30.2"'
+    dev_addr: '"addr=192.168.40.2"'
     dev_args: '"recv_frame_size=8000,num_recv_frames=512"'
     gain0: recv_gain
     gain1: recv_gain
@@ -2040,6 +2040,7 @@ blocks:
     affinity: ''
     alias: ''
     comment: Gate reflector stream before file sink.
+    group_index: '0'
     maxoutbuf: '0'
     minoutbuf: '0'
     num_channels: '1'
@@ -2056,6 +2057,7 @@ blocks:
     affinity: ''
     alias: ''
     comment: Gate initiator stream before file sink.
+    group_index: '0'
     maxoutbuf: '0'
     minoutbuf: '0'
     num_channels: '1'
@@ -2142,9 +2144,12 @@ blocks:
     minoutbuf: '0'
     repeat_total: '3'
     sample_rate: int(samp_rate)
-    settle_time_ms: '5'
+    settle_time_ms: '30'
     start_btn: start_button
+    start_freq_index: '-40'
+    step_hz: '1'
     stop_btn: stop_button
+    stop_freq_index: '40'
     wait_time_ms: '10'
   states:
     bus_sink: false

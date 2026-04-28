@@ -5,13 +5,17 @@ category: '[usrp_ble]'
 templates:
   imports: from gnuradio import usrp_ble
   make: |-
-    usrp_ble.interact_center(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${repeat_total})
+    usrp_ble.interact_center(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${repeat_total}, ${start_freq_index}, ${stop_freq_index}, ${step_hz}, ${capture_groups})
     self.${id}.set_use_msg_clock(${use_msg_clock})
   callbacks:
   - set_start_btn(${start_btn})
   - set_stop_btn(${stop_btn})
   - set_wait_time_ms(${wait_time_ms})
   - set_use_msg_clock(${use_msg_clock})
+  - set_start_freq_index(${start_freq_index})
+  - set_stop_freq_index(${stop_freq_index})
+  - set_step_hz(${step_hz})
+  - set_capture_groups(${capture_groups})
 
 #  Make one 'parameters' list entry for every parameter you want settable from the GUI.
 #     Keys include:
@@ -40,6 +44,22 @@ parameters:
   label: Repeat Total
   dtype: int
   default: 1
+- id: capture_groups
+  label: Capture Groups
+  dtype: int
+  default: 1
+- id: start_freq_index
+  label: Start Freq Index
+  dtype: int
+  default: -40
+- id: stop_freq_index
+  label: Stop Freq Index
+  dtype: int
+  default: 40
+- id: step_hz
+  label: Step (Hz)
+  dtype: real
+  default: 1e6
 - id: use_msg_clock
   label: Use Message Clock
   dtype: bool
@@ -58,15 +78,23 @@ outputs:
 - label: send1_ctrl
   domain: message
   id: send1_ctrl
+  optional: 1
 - label: send2_ctrl
   domain: message
   id: send2_ctrl
+  optional: 1
 - label: store1_ctrl
   domain: message
   id: store1_ctrl
+  optional: 1
 - label: store2_ctrl
   domain: message
   id: store2_ctrl
+  optional: 1
+- label: capture_ctrl
+  domain: message
+  id: capture_ctrl
+  optional: 1
 - label: freq_ctrl
   domain: message
   id: freq_ctrl
