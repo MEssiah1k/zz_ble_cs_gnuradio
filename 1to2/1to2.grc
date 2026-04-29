@@ -57,7 +57,7 @@ blocks:
     start: '0'
     step: '1'
     stop: '20'
-    value: '0'
+    value: '1'
     widget: counter_slider
   states:
     bus_sink: false
@@ -102,7 +102,7 @@ blocks:
     start: '0'
     step: '1'
     stop: '20'
-    value: '0'
+    value: '1'
     widget: counter_slider
   states:
     bus_sink: false
@@ -206,7 +206,6 @@ blocks:
     offset: '0'
     phase: '0'
     samp_rate: samp_rate
-    showports: 'True'
     type: complex
     waveform: analog.GR_COS_WAVE
   states:
@@ -216,14 +215,14 @@ blocks:
     coordinate: [88, 464.0]
     rotation: 0
     state: true
-- name: blocks_file_sink_initiator_2m
+- name: blocks_file_sink_initiator_calibration
   id: blocks_file_sink
   parameters:
     affinity: ''
     alias: ''
     append: 'False'
-    comment: Continuous initiator-side capture, 2m group.
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_2m
+    comment: Continuous initiator-side capture, calibration group.
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_calibration
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -231,17 +230,17 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2360, 884.0]
+    coordinate: [2360, 876.0]
     rotation: 0
     state: enabled
-- name: blocks_file_sink_initiator_4m
+- name: blocks_file_sink_initiator_measurement
   id: blocks_file_sink
   parameters:
     affinity: ''
     alias: ''
     append: 'False'
-    comment: Continuous initiator-side capture, 4m group.
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_4m
+    comment: Continuous initiator-side capture, measurement group.
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_measurement
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -249,17 +248,17 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2360, 980.0]
+    coordinate: [2360, 972.0]
     rotation: 0
     state: enabled
-- name: blocks_file_sink_reflector1_2m
+- name: blocks_file_sink_reflector1_calibration
   id: blocks_file_sink
   parameters:
     affinity: ''
     alias: ''
     append: 'False'
-    comment: Continuous reflector1-side capture, 2m group.
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_2m
+    comment: Continuous reflector1-side capture, calibration group.
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_calibration
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -267,17 +266,17 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2368, 476.0]
+    coordinate: [2368, 468.0]
     rotation: 0
     state: enabled
-- name: blocks_file_sink_reflector1_4m
+- name: blocks_file_sink_reflector1_measurement
   id: blocks_file_sink
   parameters:
     affinity: ''
     alias: ''
     append: 'False'
-    comment: Continuous reflector1-side capture, 4m group.
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_4m
+    comment: Continuous reflector1-side capture, measurement group.
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_measurement
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -285,17 +284,17 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2368, 580.0]
+    coordinate: [2368, 572.0]
     rotation: 0
     state: enabled
-- name: blocks_file_sink_reflector2_2m
+- name: blocks_file_sink_reflector2_calibration
   id: blocks_file_sink
   parameters:
     affinity: ''
     alias: ''
     append: 'False'
-    comment: Continuous reflector2-side capture, 2m group.
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_2m
+    comment: Continuous reflector2-side capture, calibration group.
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_calibration
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -303,17 +302,17 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2368, 684.0]
+    coordinate: [2368, 676.0]
     rotation: 0
     state: enabled
-- name: blocks_file_sink_reflector2_4m
+- name: blocks_file_sink_reflector2_measurement
   id: blocks_file_sink
   parameters:
     affinity: ''
     alias: ''
     append: 'False'
-    comment: Continuous reflector2-side capture, 4m group.
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_4m
+    comment: Continuous reflector2-side capture, measurement group.
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_measurement
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -321,7 +320,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2368, 780.0]
+    coordinate: [2368, 772.0]
     rotation: 0
     state: enabled
 - name: blocks_message_debug_0
@@ -331,12 +330,11 @@ blocks:
     alias: ''
     comment: ''
     en_uvec: 'True'
-    log_level: info
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 1176.0]
+    coordinate: [704, 1208.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0
@@ -624,7 +622,7 @@ blocks:
     center_freq8: '0'
     center_freq9: '0'
     clock_rate: 0e0
-    clock_source0: ''
+    clock_source0: external
     clock_source1: ''
     clock_source2: ''
     clock_source3: ''
@@ -633,7 +631,7 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dev_addr: '"addr=192.168.40.2"'
+    dev_addr: '"addr=192.168.30.2"'
     dev_args: '"send_frame_size=8000,num_send_frames=512"'
     gain0: send_gain
     gain1: send_gain
@@ -783,7 +781,7 @@ blocks:
     stream_args: ''
     stream_chans: '[]'
     sync: sync
-    time_source0: ''
+    time_source0: external
     time_source1: ''
     time_source2: ''
     time_source3: ''
@@ -1178,7 +1176,7 @@ blocks:
     center_freq8: '0'
     center_freq9: '0'
     clock_rate: 0e0
-    clock_source0: ''
+    clock_source0: external
     clock_source1: ''
     clock_source2: ''
     clock_source3: ''
@@ -1251,7 +1249,7 @@ blocks:
     dc_offs_enb7: default
     dc_offs_enb8: default
     dc_offs_enb9: default
-    dev_addr: '"addr=192.168.40.2"'
+    dev_addr: '"addr=192.168.30.2"'
     dev_args: '"recv_frame_size=8000,num_recv_frames=512"'
     gain0: recv_gain
     gain1: recv_gain
@@ -1496,7 +1494,7 @@ blocks:
     stream_args: ''
     stream_chans: '[]'
     sync: sync
-    time_source0: ''
+    time_source0: external
     time_source1: ''
     time_source2: ''
     time_source3: ''
@@ -1948,12 +1946,12 @@ blocks:
     coordinate: [1496, 788.0]
     rotation: 0
     state: true
-- name: usrp_ble_capture_gate_initiator_2m
+- name: usrp_ble_capture_gate_initiator_calibration
   id: usrp_ble_capture_gate
   parameters:
     affinity: ''
     alias: ''
-    comment: Gate initiator stream, 2m group.
+    comment: Gate initiator stream, calibration group.
     group_index: '0'
     maxoutbuf: '0'
     minoutbuf: '0'
@@ -1965,12 +1963,12 @@ blocks:
     coordinate: [2176, 888.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_capture_gate_initiator_4m
+- name: usrp_ble_capture_gate_initiator_measurement
   id: usrp_ble_capture_gate
   parameters:
     affinity: ''
     alias: ''
-    comment: Gate initiator stream, 4m group.
+    comment: Gate initiator stream, measurement group.
     group_index: '1'
     maxoutbuf: '0'
     minoutbuf: '0'
@@ -1982,12 +1980,12 @@ blocks:
     coordinate: [2176, 984.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_capture_gate_reflector1_2m
+- name: usrp_ble_capture_gate_reflector1_calibration
   id: usrp_ble_capture_gate
   parameters:
     affinity: ''
     alias: ''
-    comment: Gate reflector1 stream, 2m group.
+    comment: Gate reflector1 stream, calibration group.
     group_index: '0'
     maxoutbuf: '0'
     minoutbuf: '0'
@@ -1999,12 +1997,12 @@ blocks:
     coordinate: [2176, 480.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_capture_gate_reflector1_4m
+- name: usrp_ble_capture_gate_reflector1_measurement
   id: usrp_ble_capture_gate
   parameters:
     affinity: ''
     alias: ''
-    comment: Gate reflector1 stream, 4m group.
+    comment: Gate reflector1 stream, measurement group.
     group_index: '1'
     maxoutbuf: '0'
     minoutbuf: '0'
@@ -2016,12 +2014,12 @@ blocks:
     coordinate: [2176, 584.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_capture_gate_reflector2_2m
+- name: usrp_ble_capture_gate_reflector2_calibration
   id: usrp_ble_capture_gate
   parameters:
     affinity: ''
     alias: ''
-    comment: Gate reflector2 stream, 2m group.
+    comment: Gate reflector2 stream, calibration group.
     group_index: '0'
     maxoutbuf: '0'
     minoutbuf: '0'
@@ -2033,12 +2031,12 @@ blocks:
     coordinate: [2176, 688.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_capture_gate_reflector2_4m
+- name: usrp_ble_capture_gate_reflector2_measurement
   id: usrp_ble_capture_gate
   parameters:
     affinity: ''
     alias: ''
-    comment: Gate reflector2 stream, 4m group.
+    comment: Gate reflector2 stream, measurement group.
     group_index: '1'
     maxoutbuf: '0'
     minoutbuf: '0'
@@ -2118,37 +2116,51 @@ connections:
 - [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0_0, '0']
 - [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0_1, '0']
 - [analog_sig_source_x_0_1, '0', qtgui_freq_sink_x_0, '0']
-- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_reflector1_2m, '0']
-- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_reflector1_4m, '0']
-- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_reflector2_2m, '0']
-- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_reflector2_4m, '0']
-- [blocks_multiply_conjugate_cc_0_1, '0', usrp_ble_capture_gate_initiator_2m, '0']
-- [blocks_multiply_conjugate_cc_0_1, '0', usrp_ble_capture_gate_initiator_4m, '0']
+- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_reflector1_calibration,
+  '0']
+- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_reflector1_measurement,
+  '0']
+- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_reflector2_calibration,
+  '0']
+- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_reflector2_measurement,
+  '0']
+- [blocks_multiply_conjugate_cc_0_1, '0', usrp_ble_capture_gate_initiator_calibration,
+  '0']
+- [blocks_multiply_conjugate_cc_0_1, '0', usrp_ble_capture_gate_initiator_measurement,
+  '0']
 - [blocks_multiply_xx_0, '0', uhd_usrp_sink_0_0_0_0, '0']
 - [blocks_multiply_xx_0_0, '0', uhd_usrp_sink_0_0_0, '0']
 - [blocks_multiply_xx_0_1, '0', uhd_usrp_sink_0_0_0, '1']
 - [uhd_usrp_source_0, '0', blocks_multiply_conjugate_cc_0, '0']
 - [uhd_usrp_source_0, '1', blocks_multiply_conjugate_cc_0_0, '0']
 - [uhd_usrp_source_0_0, '0', blocks_multiply_conjugate_cc_0_1, '0']
-- [usrp_ble_capture_gate_initiator_2m, '0', blocks_file_sink_initiator_2m, '0']
-- [usrp_ble_capture_gate_initiator_4m, '0', blocks_file_sink_initiator_4m, '0']
-- [usrp_ble_capture_gate_reflector1_2m, '0', blocks_file_sink_reflector1_2m, '0']
-- [usrp_ble_capture_gate_reflector1_4m, '0', blocks_file_sink_reflector1_4m, '0']
-- [usrp_ble_capture_gate_reflector2_2m, '0', blocks_file_sink_reflector2_2m, '0']
-- [usrp_ble_capture_gate_reflector2_4m, '0', blocks_file_sink_reflector2_4m, '0']
+- [usrp_ble_capture_gate_initiator_calibration, '0', blocks_file_sink_initiator_calibration,
+  '0']
+- [usrp_ble_capture_gate_initiator_measurement, '0', blocks_file_sink_initiator_measurement,
+  '0']
+- [usrp_ble_capture_gate_reflector1_calibration, '0', blocks_file_sink_reflector1_calibration,
+  '0']
+- [usrp_ble_capture_gate_reflector1_measurement, '0', blocks_file_sink_reflector1_measurement,
+  '0']
+- [usrp_ble_capture_gate_reflector2_calibration, '0', blocks_file_sink_reflector2_calibration,
+  '0']
+- [usrp_ble_capture_gate_reflector2_measurement, '0', blocks_file_sink_reflector2_measurement,
+  '0']
 - [usrp_ble_data_send_0, '0', blocks_multiply_xx_0, '1']
 - [usrp_ble_data_send_0, '0', usrp_ble_interact_center_0, '0']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_0, '1']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_1, '1']
-- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_initiator_2m, command]
-- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_initiator_4m, command]
-- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector1_2m,
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_initiator_calibration,
   command]
-- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector1_4m,
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_initiator_measurement,
   command]
-- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector2_2m,
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector1_calibration,
   command]
-- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector2_4m,
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector1_measurement,
+  command]
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector2_calibration,
+  command]
+- [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_reflector2_measurement,
   command]
 - [usrp_ble_interact_center_0, freq_ctrl, analog_sig_source_x_0_1, cmd]
 - [usrp_ble_interact_center_0, freq_ctrl, blocks_message_debug_0, print]
@@ -2157,4 +2169,3 @@ connections:
 
 metadata:
   file_format: 1
-  grc_version: 3.10.7.0

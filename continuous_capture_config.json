@@ -2,23 +2,23 @@
   "root": "1to1",
   "capture_groups": [
     {
-      "label": "2m",
+      "label": "calibration",
       "distance_m": 2.0,
-      "reflector_file": "data_reflector_rx_from_initiator_2m",
-      "initiator_file": "data_initiator_rx_from_reflector_2m"
+      "reflector_file": "data_reflector_rx_from_initiator_calibration",
+      "initiator_file": "data_initiator_rx_from_reflector_calibration"
     },
     {
-      "label": "4m",
+      "label": "measurement",
       "distance_m": 4.0,
-      "reflector_file": "data_reflector_rx_from_initiator_4m",
-      "initiator_file": "data_initiator_rx_from_reflector_4m"
+      "reflector_file": "data_reflector_rx_from_initiator_measurement",
+      "initiator_file": "data_initiator_rx_from_reflector_measurement"
     }
   ],
   "center_freq_hz": 2440000000.0,
   "start_offset_hz": -4000000.0,
   "stop_offset_hz": 4000000.0,
   "step_hz": 100000.0,
-  "repeats": 2,
+  "repeats": 1,
   "sample_rate": 9523809.523809524,
   "smooth_len": 64,
   "threshold_ratio": 0.005,

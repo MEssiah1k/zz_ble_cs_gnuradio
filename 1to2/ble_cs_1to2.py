@@ -73,7 +73,7 @@ class ble_cs_1to2(gr.top_block, Qt.QWidget):
         self.start_freq_index = start_freq_index = -40
         self.start_button = start_button = 0
         self.send_gain = send_gain = 0
-        self.samp_rate = samp_rate = 10e6
+        self.samp_rate = samp_rate = 9.5e6
         self.repeat_total = repeat_total = 2
         self.recv_gain = recv_gain = 0
         self.centetr_fre = centetr_fre = 2.44e9
@@ -104,12 +104,12 @@ class ble_cs_1to2(gr.top_block, Qt.QWidget):
         self.usrp_ble_interact_center_0.set_use_msg_clock(False)
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
         self.usrp_ble_data_send_0 = usrp_ble.data_send(samp_rate, 0.001)
-        self.usrp_ble_capture_gate_reflector1_2m = usrp_ble.capture_gate(1, 0)
-        self.usrp_ble_capture_gate_reflector2_2m = usrp_ble.capture_gate(1, 0)
-        self.usrp_ble_capture_gate_initiator_2m = usrp_ble.capture_gate(1, 0)
-        self.usrp_ble_capture_gate_reflector1_4m = usrp_ble.capture_gate(1, 1)
-        self.usrp_ble_capture_gate_reflector2_4m = usrp_ble.capture_gate(1, 1)
-        self.usrp_ble_capture_gate_initiator_4m = usrp_ble.capture_gate(1, 1)
+        self.usrp_ble_capture_gate_reflector1_calibration = usrp_ble.capture_gate(1, 0)
+        self.usrp_ble_capture_gate_reflector2_calibration = usrp_ble.capture_gate(1, 0)
+        self.usrp_ble_capture_gate_initiator_calibration = usrp_ble.capture_gate(1, 0)
+        self.usrp_ble_capture_gate_reflector1_measurement = usrp_ble.capture_gate(1, 1)
+        self.usrp_ble_capture_gate_reflector2_measurement = usrp_ble.capture_gate(1, 1)
+        self.usrp_ble_capture_gate_initiator_measurement = usrp_ble.capture_gate(1, 1)
         self.uhd_usrp_source_0_0 = uhd.usrp_source(
             ",".join(("addr=192.168.10.2", "recv_frame_size=8000,num_recv_frames=512")),
             uhd.stream_args(
@@ -287,18 +287,18 @@ class ble_cs_1to2(gr.top_block, Qt.QWidget):
         self.blocks_multiply_conjugate_cc_0_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_multiply_conjugate_cc_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_message_debug_0 = blocks.message_debug(True, gr.log_levels.info)
-        self.blocks_file_sink_reflector1_2m = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_2m', False)
-        self.blocks_file_sink_reflector1_2m.set_unbuffered(False)
-        self.blocks_file_sink_reflector2_2m = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_2m', False)
-        self.blocks_file_sink_reflector2_2m.set_unbuffered(False)
-        self.blocks_file_sink_initiator_2m = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_2m', False)
-        self.blocks_file_sink_initiator_2m.set_unbuffered(False)
-        self.blocks_file_sink_reflector1_4m = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_4m', False)
-        self.blocks_file_sink_reflector1_4m.set_unbuffered(False)
-        self.blocks_file_sink_reflector2_4m = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_4m', False)
-        self.blocks_file_sink_reflector2_4m.set_unbuffered(False)
-        self.blocks_file_sink_initiator_4m = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_4m', False)
-        self.blocks_file_sink_initiator_4m.set_unbuffered(False)
+        self.blocks_file_sink_reflector1_calibration = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_calibration', False)
+        self.blocks_file_sink_reflector1_calibration.set_unbuffered(False)
+        self.blocks_file_sink_reflector2_calibration = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_calibration', False)
+        self.blocks_file_sink_reflector2_calibration.set_unbuffered(False)
+        self.blocks_file_sink_initiator_calibration = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_calibration', False)
+        self.blocks_file_sink_initiator_calibration.set_unbuffered(False)
+        self.blocks_file_sink_reflector1_measurement = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_reflector1_rx_from_initiator_measurement', False)
+        self.blocks_file_sink_reflector1_measurement.set_unbuffered(False)
+        self.blocks_file_sink_reflector2_measurement = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_reflector2_rx_from_initiator_measurement', False)
+        self.blocks_file_sink_reflector2_measurement.set_unbuffered(False)
+        self.blocks_file_sink_initiator_measurement = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to2/data_initiator_rx_from_reflectors_measurement', False)
+        self.blocks_file_sink_initiator_measurement.set_unbuffered(False)
         self.analog_sig_source_x_0_1 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, (start_freq_index*step_hz), 1, 0, 0)
 
 
@@ -307,12 +307,12 @@ class ble_cs_1to2(gr.top_block, Qt.QWidget):
         ##################################################
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.analog_sig_source_x_0_1, 'cmd'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.blocks_message_debug_0, 'print'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_reflector1_2m, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_reflector2_2m, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_initiator_2m, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_reflector1_4m, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_reflector2_4m, 'command'))
-        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_initiator_4m, 'command'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_reflector1_calibration, 'command'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_reflector2_calibration, 'command'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_initiator_calibration, 'command'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_reflector1_measurement, 'command'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_reflector2_measurement, 'command'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_initiator_measurement, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send1_ctrl'), (self.usrp_ble_data_send_0, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send2_ctrl'), (self.usrp_ble_data_send_0_0, 'command'))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_conjugate_cc_0, 1))
@@ -321,14 +321,14 @@ class ble_cs_1to2(gr.top_block, Qt.QWidget):
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0, 0))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0_0, 0))
         self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0_1, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_reflector1_2m, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_reflector1_4m, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_reflector2_2m, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_reflector2_4m, 0))
+        self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_reflector1_calibration, 0))
+        self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_reflector1_measurement, 0))
+        self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_reflector2_calibration, 0))
+        self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_reflector2_measurement, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0_1, 0), (self.qtgui_freq_sink_x_0, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0_1, 0), (self.qtgui_time_sink_x_0, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0_1, 0), (self.usrp_ble_capture_gate_initiator_2m, 0))
-        self.connect((self.blocks_multiply_conjugate_cc_0_1, 0), (self.usrp_ble_capture_gate_initiator_4m, 0))
+        self.connect((self.blocks_multiply_conjugate_cc_0_1, 0), (self.usrp_ble_capture_gate_initiator_calibration, 0))
+        self.connect((self.blocks_multiply_conjugate_cc_0_1, 0), (self.usrp_ble_capture_gate_initiator_measurement, 0))
         self.connect((self.blocks_multiply_xx_0, 0), (self.uhd_usrp_sink_0_0_0_0, 0))
         self.connect((self.blocks_multiply_xx_0_0, 0), (self.uhd_usrp_sink_0_0_0, 0))
         self.connect((self.blocks_multiply_xx_0_1, 0), (self.uhd_usrp_sink_0_0_0, 1))
@@ -339,12 +339,12 @@ class ble_cs_1to2(gr.top_block, Qt.QWidget):
         self.connect((self.usrp_ble_data_send_0, 0), (self.usrp_ble_interact_center_0, 0))
         self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_multiply_xx_0_0, 1))
         self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_multiply_xx_0_1, 1))
-        self.connect((self.usrp_ble_capture_gate_reflector1_2m, 0), (self.blocks_file_sink_reflector1_2m, 0))
-        self.connect((self.usrp_ble_capture_gate_reflector2_2m, 0), (self.blocks_file_sink_reflector2_2m, 0))
-        self.connect((self.usrp_ble_capture_gate_initiator_2m, 0), (self.blocks_file_sink_initiator_2m, 0))
-        self.connect((self.usrp_ble_capture_gate_reflector1_4m, 0), (self.blocks_file_sink_reflector1_4m, 0))
-        self.connect((self.usrp_ble_capture_gate_reflector2_4m, 0), (self.blocks_file_sink_reflector2_4m, 0))
-        self.connect((self.usrp_ble_capture_gate_initiator_4m, 0), (self.blocks_file_sink_initiator_4m, 0))
+        self.connect((self.usrp_ble_capture_gate_reflector1_calibration, 0), (self.blocks_file_sink_reflector1_calibration, 0))
+        self.connect((self.usrp_ble_capture_gate_reflector2_calibration, 0), (self.blocks_file_sink_reflector2_calibration, 0))
+        self.connect((self.usrp_ble_capture_gate_initiator_calibration, 0), (self.blocks_file_sink_initiator_calibration, 0))
+        self.connect((self.usrp_ble_capture_gate_reflector1_measurement, 0), (self.blocks_file_sink_reflector1_measurement, 0))
+        self.connect((self.usrp_ble_capture_gate_reflector2_measurement, 0), (self.blocks_file_sink_reflector2_measurement, 0))
+        self.connect((self.usrp_ble_capture_gate_initiator_measurement, 0), (self.blocks_file_sink_initiator_measurement, 0))
 
 
     def closeEvent(self, event):

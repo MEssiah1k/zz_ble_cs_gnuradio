@@ -2211,7 +2211,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/ubuntu/zz_ble_cs_gnuradio/hop/data_store_2
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/hop/data_store_2
     skip_len: '30000'
   states:
     bus_sink: false
@@ -2227,7 +2227,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/ubuntu/zz_ble_cs_gnuradio/hop/data_store_1
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/hop/data_store_1
     skip_len: '30000'
   states:
     bus_sink: false

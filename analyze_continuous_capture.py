@@ -22,21 +22,21 @@ from check_bin import circular_phase_spread_rad, classify_signal, phase_cluster_
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_ROOT = PROJECT_ROOT / "1to1_rfhop"
+DEFAULT_ROOT = PROJECT_ROOT / "1to1"
 DEFAULT_PLOT_ROOT = PROJECT_ROOT / "output_analyze_continuous"
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "continuous_capture_config.json"
 DEFAULT_CAPTURE_GROUPS = [
     {
-        "label": "2m",
+        "label": "calibration",
         "distance_m": 2.0,
-        "reflector_file": "data_reflector_rx_from_initiator_2m",
-        "initiator_file": "data_initiator_rx_from_reflector_2m",
+        "reflector_file": "data_reflector_rx_from_initiator_calibration",
+        "initiator_file": "data_initiator_rx_from_reflector_calibration",
     },
     {
-        "label": "4m",
+        "label": "measurement",
         "distance_m": 4.0,
-        "reflector_file": "data_reflector_rx_from_initiator_4m",
-        "initiator_file": "data_initiator_rx_from_reflector_4m",
+        "reflector_file": "data_reflector_rx_from_initiator_measurement",
+        "initiator_file": "data_initiator_rx_from_reflector_measurement",
     },
 ]
 PAIR_FREQ_CSV_FIELDS = [
@@ -75,7 +75,7 @@ def default_capture_paths(root: Path) -> tuple[Path, Path]:
     resolved_root = resolve_root(root)
     reflector = _pick_existing_path(
         [
-            resolved_root / "data_reflector_rx_from_initiator_2m",
+            resolved_root / "data_reflector_rx_from_initiator_calibration",
             resolved_root / "data_reflector_rx_from_initiator2",
             resolved_root / "continuous_capture" / "data_reflector_rx_from_initiator.bin",
             resolved_root / "data_reflector_rx_from_initiator.bin",
@@ -83,7 +83,7 @@ def default_capture_paths(root: Path) -> tuple[Path, Path]:
     )
     initiator = _pick_existing_path(
         [
-            resolved_root / "data_initiator_rx_from_reflector_2m",
+            resolved_root / "data_initiator_rx_from_reflector_calibration",
             resolved_root / "data_initiator_rx_from_reflector2",
             resolved_root / "continuous_capture" / "data_initiator_rx_from_reflector.bin",
             resolved_root / "data_initiator_rx_from_reflector.bin",
@@ -1157,7 +1157,7 @@ def analyze_one_capture(
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze continuous file-sink captures")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="JSON 配置文件路径；默认读取 continuous_capture_config.json")
-    parser.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    parser.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="实验目录名或路径，例如 1to1 / 1to1_2sides")
     parser.add_argument("--reflector-file", type=Path, default=None)
     parser.add_argument("--initiator-file", type=Path, default=None)
     parser.add_argument("--center-freq-hz", type=float, default=2.44e9)
@@ -1177,7 +1177,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--save-plot-dir", type=Path, default=None)
     parser.add_argument("--save-pair-csv", type=Path, default=None)
     parser.add_argument("--save-pair-angle-csv", type=Path, default=None)
-    parser.add_argument("--capture-group", default="all", help="要分析的采集组 label；默认 all。配置文件里当前默认有 2m 和 4m")
+    parser.add_argument("--capture-group", default="all", help="要分析的采集组 label；默认 all。配置文件里当前默认有 calibration 和 measurement")
     parser.add_argument("--no-distance-estimates", action="store_true", help="只做 burst 分析，不生成两种距离估计结果")
     parser.add_argument("--distance-min-m", type=float, default=0.0, help="兼容旧配置；当前 phase-match 改为围绕斜率距离局部搜索")
     parser.add_argument("--distance-max-m", type=float, default=20.0, help="兼容旧配置；当前 phase-match 改为围绕斜率距离局部搜索")
@@ -1283,6 +1283,300 @@ def print_distance_summary(result: dict[str, Any], *, disabled: bool) -> None:
         print(f"distance_phase_match_m: {float(phase_match['distance_m'])}")
     else:
         print(f"distance_phase_match_m: error ({phase_match.get('error', 'unknown')})")
+
+
+def _format_optional_distance(value: Any) -> str:
+    if value is None:
+        return "n/a"
+    try:
+        return f"{float(value):.6f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_estimate_distance(estimate: dict[str, Any] | None) -> str:
+    if estimate is None:
+        return "unavailable"
+    if "distance_m" in estimate:
+        return _format_optional_distance(estimate.get("distance_m"))
+    return f"error ({estimate.get('error', 'unknown')})"
+
+
+def _distance_summary_line(group: str, estimates: Any) -> str:
+    linear_text = "unavailable"
+    phase_match_text = "unavailable"
+    if isinstance(estimates, dict):
+        linear = estimates.get("linear_fit")
+        phase_match = estimates.get("phase_match")
+        linear_text = _format_estimate_distance(linear if isinstance(linear, dict) else None)
+        phase_match_text = _format_estimate_distance(phase_match if isinstance(phase_match, dict) else None)
+    return (
+        "distance_summary_group: {group}, "
+        "distance_linear_fit_m: {linear}, distance_phase_match_m: {phase_match}".format(
+            group=group,
+            linear=linear_text,
+            phase_match=phase_match_text,
+        )
+    )
+
+
+def _group_path_has_token(result: dict[str, Any], token: str) -> bool:
+    initiator_name = Path(str(result.get("initiator_file", ""))).name.lower()
+    reflector_name = Path(str(result.get("reflector_file", ""))).name.lower()
+    return token in initiator_name or token in reflector_name
+
+
+def _pick_group_result_for_pre_cancel(
+    results: list[dict[str, Any]],
+    *,
+    role: str,
+) -> dict[str, Any] | None:
+    role_lower = role.lower()
+    token = "_calibration" if role_lower == "calibration" else "_measurement"
+
+    for item in results:
+        label = str(item.get("capture_group", "")).lower()
+        if label == role_lower:
+            return item
+    for item in results:
+        if _group_path_has_token(item, token):
+            return item
+    return None
+
+
+def _collect_valid_freq_repeat_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    valid_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if not bool(row.get("sequence_ok", True)):
+            continue
+        if not bool(row.get("assigned_to_freq", False)):
+            continue
+        freq_index = int(row.get("freq_index", -1))
+        repeat_index = int(row.get("repeat_index", -1))
+        if freq_index < 0 or repeat_index < 0:
+            continue
+        if row.get("freq_hz") is None:
+            continue
+        valid_rows.append(row)
+    valid_rows.sort(
+        key=lambda item: (
+            int(item.get("freq_index", -1)),
+            int(item.get("repeat_index", -1)),
+            int(item.get("burst_index", -1)),
+        )
+    )
+    return valid_rows
+
+
+def build_phase_canceled_rows(
+    measurement_rows: list[dict[str, Any]],
+    calibration_rows: list[dict[str, Any]],
+    *,
+    side_name: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    measurement_valid = _collect_valid_freq_repeat_rows(measurement_rows)
+    calibration_valid = _collect_valid_freq_repeat_rows(calibration_rows)
+
+    calibration_by_key: dict[tuple[int, int], dict[str, Any]] = {}
+    for row in calibration_valid:
+        key = (int(row["freq_index"]), int(row["repeat_index"]))
+        calibration_by_key.setdefault(key, row)
+
+    canceled_rows: list[dict[str, Any]] = []
+    seen_keys: set[tuple[int, int]] = set()
+    duplicate_measurement_rows = 0
+    missing_reference_rows = 0
+
+    for row in measurement_valid:
+        key = (int(row["freq_index"]), int(row["repeat_index"]))
+        if key in seen_keys:
+            duplicate_measurement_rows += 1
+            continue
+        seen_keys.add(key)
+
+        calibration_row = calibration_by_key.get(key)
+        if calibration_row is None:
+            missing_reference_rows += 1
+            continue
+
+        z_measure = complex(float(row["robust_mean_i"]), float(row["robust_mean_q"]))
+        z_calibration = complex(float(calibration_row["robust_mean_i"]), float(calibration_row["robust_mean_q"]))
+        z_canceled = z_measure * np.conj(z_calibration)
+        canceled_rows.append(
+            {
+                "sequence_ok": True,
+                "assigned_to_freq": True,
+                "freq_index": int(key[0]),
+                "repeat_index": int(key[1]),
+                "freq_hz": float(row["freq_hz"]),
+                "slot_kind": "phase_canceled",
+                "quality_flags": [],
+                "robust_mean_i": float(np.real(z_canceled)),
+                "robust_mean_q": float(np.imag(z_canceled)),
+                "robust_mean_abs": float(abs(z_canceled)),
+                "robust_mean_phase": float(np.angle(z_canceled)),
+                "measurement_burst_index": int(row.get("burst_index", -1)),
+                "calibration_burst_index": int(calibration_row.get("burst_index", -1)),
+            }
+        )
+
+    stats = {
+        "side": side_name,
+        "measurement_valid_rows": int(len(measurement_valid)),
+        "calibration_valid_rows": int(len(calibration_valid)),
+        "matched_rows": int(len(canceled_rows)),
+        "missing_reference_rows": int(missing_reference_rows),
+        "duplicate_measurement_rows": int(duplicate_measurement_rows),
+    }
+    return canceled_rows, stats
+
+
+def run_pre_cancel_distance_analysis(
+    *,
+    args: argparse.Namespace,
+    all_results: list[dict[str, Any]],
+    base_plot_dir: Path,
+) -> dict[str, Any] | None:
+    calibration_result = _pick_group_result_for_pre_cancel(all_results, role="calibration")
+    measurement_result = _pick_group_result_for_pre_cancel(all_results, role="measurement")
+    if calibration_result is None or measurement_result is None:
+        print("pre_cancel_distance: skipped (需要同时存在 calibration 与 measurement 采集组)")
+        return None
+
+    calibration_initiator_rows = calibration_result.get("initiator", {}).get("rows", [])
+    calibration_reflector_rows = calibration_result.get("reflector", {}).get("rows", [])
+    measurement_initiator_rows = measurement_result.get("initiator", {}).get("rows", [])
+    measurement_reflector_rows = measurement_result.get("reflector", {}).get("rows", [])
+    if (
+        not isinstance(calibration_initiator_rows, list)
+        or not isinstance(calibration_reflector_rows, list)
+        or not isinstance(measurement_initiator_rows, list)
+        or not isinstance(measurement_reflector_rows, list)
+    ):
+        print("pre_cancel_distance: skipped (组内 rows 数据格式异常)")
+        return None
+
+    initiator_canceled_rows, initiator_canceled_stats = build_phase_canceled_rows(
+        measurement_initiator_rows,
+        calibration_initiator_rows,
+        side_name="initiator",
+    )
+    reflector_canceled_rows, reflector_canceled_stats = build_phase_canceled_rows(
+        measurement_reflector_rows,
+        calibration_reflector_rows,
+        side_name="reflector",
+    )
+
+    pre_cancel_plot_dir = (base_plot_dir / "measurement_minus_calibration_pre_cancel").resolve()
+    pair_phase_plot_path = pre_cancel_plot_dir / "pair_phase_by_freq_pre_cancel.png"
+    pair_phase_rows = plot_pair_phase_by_freq(
+        reflector_canceled_rows,
+        initiator_canceled_rows,
+        pair_phase_plot_path,
+    )
+    pair_phase_csv_path = pre_cancel_plot_dir / "pair_phase_by_freq_pre_cancel.csv"
+    pair_angle_csv_path = pre_cancel_plot_dir / "pair_angle_by_freq_pre_cancel.csv"
+    save_pair_phase_csv(pair_phase_rows, pair_phase_csv_path)
+    save_pair_angle_csv(pair_phase_rows, pair_angle_csv_path)
+
+    expected_bursts = expected_burst_count(
+        args.start_offset_hz,
+        args.stop_offset_hz,
+        args.step_hz,
+        args.repeats,
+    )
+    expected_freq_count = int(round(float(expected_bursts) / float(args.repeats))) if args.repeats > 0 else 0
+    initiator_diag = build_side_freq_diagnostics(
+        initiator_canceled_rows,
+        expected_freq_count=expected_freq_count,
+        expected_repeats=args.repeats,
+    )
+    reflector_diag = build_side_freq_diagnostics(
+        reflector_canceled_rows,
+        expected_freq_count=expected_freq_count,
+        expected_repeats=args.repeats,
+    )
+    pair_diag = build_pair_freq_diagnostics(initiator_diag, reflector_diag, pair_phase_rows)
+
+    pre_cancel_result: dict[str, Any] = {
+        "root": str(measurement_result.get("root", resolve_root(args.root))),
+        "capture_group": "measurement_minus_calibration_pre_cancel",
+        "capture_distance_m": measurement_result.get("capture_distance_m"),
+        "config_path": measurement_result.get("config_path"),
+        "reflector_file": str(measurement_result.get("reflector_file", "")),
+        "initiator_file": str(measurement_result.get("initiator_file", "")),
+        "measurement_capture_group": str(measurement_result.get("capture_group", "measurement")),
+        "calibration_capture_group": str(calibration_result.get("capture_group", "calibration")),
+        "analysis_parameters": dict(measurement_result.get("analysis_parameters", {})),
+        "expected_burst_count": int(expected_bursts),
+        "pre_cancel_method": "measurement_phase - calibration_phase on each side, then pair & fit",
+        "initiator": {
+            "rows": initiator_canceled_rows,
+            "summary": initiator_canceled_stats,
+        },
+        "reflector": {
+            "rows": reflector_canceled_rows,
+            "summary": reflector_canceled_stats,
+        },
+        "pair_phase_by_freq": pair_phase_rows,
+        "pair_phase_plot_path": str(pair_phase_plot_path),
+        "pair_phase_csv_path": str(pair_phase_csv_path),
+        "pair_angle_csv_path": str(pair_angle_csv_path),
+        "initiator_freq_diagnostics": initiator_diag,
+        "reflector_freq_diagnostics": reflector_diag,
+        "pair_freq_diagnostics": pair_diag,
+    }
+
+    print("pre_cancel_distance_mode: measurement_minus_calibration_before_fit")
+    print(f"pre_cancel_measurement_group: {pre_cancel_result['measurement_capture_group']}")
+    print(f"pre_cancel_calibration_group: {pre_cancel_result['calibration_capture_group']}")
+    print(f"saved_pre_cancel_pair_phase_plot: {pair_phase_plot_path}")
+    print(f"saved_pre_cancel_pair_phase_csv: {pair_phase_csv_path}")
+    print(f"saved_pre_cancel_pair_angle_csv: {pair_angle_csv_path}")
+
+    if not args.no_distance_estimates:
+        pre_cancel_args = argparse.Namespace(**vars(args))
+        pre_cancel_args.save_plot_dir = pre_cancel_plot_dir
+        add_distance_estimates(
+            pre_cancel_result,
+            pre_cancel_args,
+            pair_phase_rows,
+            initiator_canceled_rows,
+            reflector_canceled_rows,
+        )
+
+    print_distance_summary(pre_cancel_result, disabled=bool(args.no_distance_estimates))
+    return pre_cancel_result
+
+
+def print_final_distance_summary(
+    results: list[dict[str, Any]],
+    *,
+    disabled: bool,
+    pre_cancel_result: dict[str, Any] | None = None,
+) -> None:
+    """在终端最后统一打印所有 capture_group 的测距结果摘要。"""
+    print("final_distance_summary_begin")
+    if disabled:
+        print("final_distance_summary: disabled_by_no_distance_estimates")
+        print("final_distance_summary_end")
+        return
+    if not results:
+        print("final_distance_summary: unavailable")
+        print("final_distance_summary_end")
+        return
+
+    for item in results:
+        group = str(item.get("capture_group", "unknown"))
+        print(_distance_summary_line(group, item.get("distance_estimates")))
+    if pre_cancel_result is not None:
+        print(
+            _distance_summary_line(
+                str(pre_cancel_result.get("capture_group", "measurement_minus_calibration_pre_cancel")),
+                pre_cancel_result.get("distance_estimates"),
+            )
+        )
+    print("final_distance_summary_end")
 
 
 def run_capture_analysis(
@@ -1498,11 +1792,28 @@ def main() -> None:
             )
         )
 
+    pre_cancel_result: dict[str, Any] | None = None
+    if not explicit_files:
+        pre_cancel_result = run_pre_cancel_distance_analysis(
+            args=args,
+            all_results=all_results,
+            base_plot_dir=base_plot_dir,
+        )
+
     if not explicit_files and args.save_json is not None and len(run_specs) > 1:
         out_path = args.save_json.resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps({"root": str(root), "results": all_results}, indent=2, ensure_ascii=False), encoding="utf-8")
+        combined_result: dict[str, Any] = {"root": str(root), "results": all_results}
+        if pre_cancel_result is not None:
+            combined_result["pre_cancel_result"] = pre_cancel_result
+        out_path.write_text(json.dumps(combined_result, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"saved_json: {out_path}")
+
+    print_final_distance_summary(
+        all_results,
+        disabled=bool(args.no_distance_estimates),
+        pre_cancel_result=pre_cancel_result,
+    )
 
 
 if __name__ == "__main__":

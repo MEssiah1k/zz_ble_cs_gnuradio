@@ -42,7 +42,7 @@ from PyQt5 import QtCore
 
 from gnuradio import qtgui
 
-class ble_cs_1to1(gr.top_block, Qt.QWidget):
+class ble_cs_1to1_2sides(gr.top_block, Qt.QWidget):
 
     def __init__(self):
         gr.top_block.__init__(self, "Not titled yet", catch_exceptions=True)
@@ -65,7 +65,7 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.top_grid_layout = Qt.QGridLayout()
         self.top_layout.addLayout(self.top_grid_layout)
 
-        self.settings = Qt.QSettings("GNU Radio", "ble_cs_1to1")
+        self.settings = Qt.QSettings("GNU Radio", "ble_cs_1to1_2sides")
 
         try:
             if StrictVersion(Qt.qVersion()) < StrictVersion("5.0.0"):
@@ -78,16 +78,16 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
-        self.wait_time_ms = wait_time_ms = 100
+        self.wait_time_ms = wait_time_ms = 50
         self.stop_freq_index = stop_freq_index = 40
         self.stop_button = stop_button = 0
         self.step_hz = step_hz = 1e5
         self.start_freq_index = start_freq_index = -40
         self.start_button = start_button = 0
-        self.send_gain = send_gain = 0
-        self.samp_rate = samp_rate = 9.5e6
-        self.repeat_total = repeat_total = 2
-        self.recv_gain = recv_gain = 0
+        self.send_gain = send_gain = 1
+        self.samp_rate = samp_rate = 10e6
+        self.repeat_total = repeat_total = 1
+        self.recv_gain = recv_gain = 1
         self.centetr_fre = centetr_fre = 2.44e9
 
         ##################################################
@@ -105,10 +105,10 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         _start_button_push_button.pressed.connect(lambda: self.set_start_button(self._start_button_choices['Pressed']))
         _start_button_push_button.released.connect(lambda: self.set_start_button(self._start_button_choices['Released']))
         self.top_layout.addWidget(_start_button_push_button)
-        self._send_gain_range = Range(0, 20, 1, 0, 200)
+        self._send_gain_range = Range(0, 20, 1, 1, 200)
         self._send_gain_win = RangeWidget(self._send_gain_range, self.set_send_gain, "'send_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._send_gain_win)
-        self._recv_gain_range = Range(0, 20, 1, 0, 200)
+        self._recv_gain_range = Range(0, 20, 1, 1, 200)
         self._recv_gain_win = RangeWidget(self._recv_gain_range, self.set_recv_gain, "'recv_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._recv_gain_win)
         self.usrp_ble_interact_center_0 = usrp_ble.interact_center(int(samp_rate), start_button, stop_button, wait_time_ms, repeat_total, start_freq_index, stop_freq_index, step_hz, 2)
@@ -120,15 +120,15 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.usrp_ble_capture_gate_0_0 = usrp_ble.capture_gate(1, 0)
         self.usrp_ble_capture_gate_0 = usrp_ble.capture_gate(1, 0)
         self.uhd_usrp_source_0_0 = uhd.usrp_source(
-            ",".join(("addr=192.168.30.2", "recv_frame_size=8000,num_recv_frames=512")),
+            ",".join(("addr=192.168.40.2", "recv_frame_size=8000,num_recv_frames=512")),
             uhd.stream_args(
                 cpu_format="fc32",
                 otw_format="sc16",
                 args='',
-                channels=list(range(0,2)),
+                channels=list(range(0,1)),
             ),
         )
-        self.uhd_usrp_source_0_0.set_subdev_spec('A:0 B:0', 0)
+        self.uhd_usrp_source_0_0.set_subdev_spec('A:0', 0)
         self.uhd_usrp_source_0_0.set_samp_rate(samp_rate)
         self.uhd_usrp_source_0_0.set_time_unknown_pps(uhd.time_spec(0))
 
@@ -136,22 +136,36 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.uhd_usrp_source_0_0.set_antenna("RX2", 0)
         self.uhd_usrp_source_0_0.set_bandwidth(samp_rate, 0)
         self.uhd_usrp_source_0_0.set_gain(recv_gain, 0)
-
-        self.uhd_usrp_source_0_0.set_center_freq(centetr_fre, 1)
-        self.uhd_usrp_source_0_0.set_antenna("RX2", 1)
-        self.uhd_usrp_source_0_0.set_bandwidth(samp_rate, 1)
-        self.uhd_usrp_source_0_0.set_gain(recv_gain, 1)
-        self.uhd_usrp_sink_0_0_0_0 = uhd.usrp_sink(
-            ",".join(("addr=192.168.30.2", "send_frame_size=8000,num_send_frames=512")),
+        self.uhd_usrp_source_0 = uhd.usrp_source(
+            ",".join(("addr=192.168.30.2", "recv_frame_size=8000,num_recv_frames=512")),
             uhd.stream_args(
                 cpu_format="fc32",
                 otw_format="sc16",
                 args='',
-                channels=list(range(0,2)),
+                channels=list(range(0,1)),
+            ),
+        )
+        self.uhd_usrp_source_0.set_clock_source('external', 0)
+        self.uhd_usrp_source_0.set_time_source('external', 0)
+        self.uhd_usrp_source_0.set_subdev_spec('A:0', 0)
+        self.uhd_usrp_source_0.set_samp_rate(samp_rate)
+        self.uhd_usrp_source_0.set_time_unknown_pps(uhd.time_spec(0))
+
+        self.uhd_usrp_source_0.set_center_freq(centetr_fre, 0)
+        self.uhd_usrp_source_0.set_antenna("RX2", 0)
+        self.uhd_usrp_source_0.set_bandwidth(samp_rate, 0)
+        self.uhd_usrp_source_0.set_gain(recv_gain, 0)
+        self.uhd_usrp_sink_0_0_0_0 = uhd.usrp_sink(
+            ",".join(("addr=192.168.40.2", "send_frame_size=8000,num_send_frames=512")),
+            uhd.stream_args(
+                cpu_format="fc32",
+                otw_format="sc16",
+                args='',
+                channels=list(range(0,1)),
             ),
             "",
         )
-        self.uhd_usrp_sink_0_0_0_0.set_subdev_spec('A:0 B:0', 0)
+        self.uhd_usrp_sink_0_0_0_0.set_subdev_spec('A:0', 0)
         self.uhd_usrp_sink_0_0_0_0.set_samp_rate(samp_rate)
         self.uhd_usrp_sink_0_0_0_0.set_time_unknown_pps(uhd.time_spec(0))
 
@@ -159,23 +173,38 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.uhd_usrp_sink_0_0_0_0.set_antenna('TX/RX', 0)
         self.uhd_usrp_sink_0_0_0_0.set_bandwidth(samp_rate, 0)
         self.uhd_usrp_sink_0_0_0_0.set_gain(send_gain, 0)
+        self.uhd_usrp_sink_0_0_0 = uhd.usrp_sink(
+            ",".join(("addr=192.168.30.2", "send_frame_size=8000,num_send_frames=512")),
+            uhd.stream_args(
+                cpu_format="fc32",
+                otw_format="sc16",
+                args='',
+                channels=list(range(0,1)),
+            ),
+            "",
+        )
+        self.uhd_usrp_sink_0_0_0.set_clock_source('external', 0)
+        self.uhd_usrp_sink_0_0_0.set_time_source('external', 0)
+        self.uhd_usrp_sink_0_0_0.set_subdev_spec('A:0', 0)
+        self.uhd_usrp_sink_0_0_0.set_samp_rate(samp_rate)
+        self.uhd_usrp_sink_0_0_0.set_time_unknown_pps(uhd.time_spec(0))
 
-        self.uhd_usrp_sink_0_0_0_0.set_center_freq(centetr_fre, 1)
-        self.uhd_usrp_sink_0_0_0_0.set_antenna('TX/RX', 1)
-        self.uhd_usrp_sink_0_0_0_0.set_bandwidth(samp_rate, 1)
-        self.uhd_usrp_sink_0_0_0_0.set_gain(send_gain, 1)
+        self.uhd_usrp_sink_0_0_0.set_center_freq(centetr_fre, 0)
+        self.uhd_usrp_sink_0_0_0.set_antenna('TX/RX', 0)
+        self.uhd_usrp_sink_0_0_0.set_bandwidth(samp_rate, 0)
+        self.uhd_usrp_sink_0_0_0.set_gain(send_gain, 0)
         self.blocks_multiply_xx_0_0 = blocks.multiply_vcc(1)
         self.blocks_multiply_xx_0 = blocks.multiply_vcc(1)
         self.blocks_multiply_conjugate_cc_0_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_multiply_conjugate_cc_0 = blocks.multiply_conjugate_cc(1)
         self.blocks_message_debug_0 = blocks.message_debug(True)
-        self.blocks_file_sink_1_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector_measurement', False)
+        self.blocks_file_sink_1_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1_2sides/data_initiator_rx_from_reflector_measurement', False)
         self.blocks_file_sink_1_0.set_unbuffered(False)
-        self.blocks_file_sink_1 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator_measurement', False)
+        self.blocks_file_sink_1 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1_2sides/data_reflector_rx_from_initiator_measurement', False)
         self.blocks_file_sink_1.set_unbuffered(False)
-        self.blocks_file_sink_0_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector_calibration', False)
+        self.blocks_file_sink_0_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1_2sides/data_initiator_rx_from_reflector_calibration', False)
         self.blocks_file_sink_0_0.set_unbuffered(False)
-        self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator_calibration', False)
+        self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1_2sides/data_reflector_rx_from_initiator_calibration', False)
         self.blocks_file_sink_0.set_unbuffered(False)
         self.analog_sig_source_x_0_1 = analog.sig_source_c(samp_rate, analog.GR_COS_WAVE, start_freq_index*step_hz, 1, 0, 0)
 
@@ -199,10 +228,10 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_1, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_0_0, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_1_0, 0))
-        self.connect((self.blocks_multiply_xx_0, 0), (self.uhd_usrp_sink_0_0_0_0, 0))
-        self.connect((self.blocks_multiply_xx_0_0, 0), (self.uhd_usrp_sink_0_0_0_0, 1))
-        self.connect((self.uhd_usrp_source_0_0, 1), (self.blocks_multiply_conjugate_cc_0, 0))
-        self.connect((self.uhd_usrp_source_0_0, 0), (self.blocks_multiply_conjugate_cc_0_0, 0))
+        self.connect((self.blocks_multiply_xx_0, 0), (self.uhd_usrp_sink_0_0_0, 0))
+        self.connect((self.blocks_multiply_xx_0_0, 0), (self.uhd_usrp_sink_0_0_0_0, 0))
+        self.connect((self.uhd_usrp_source_0, 0), (self.blocks_multiply_conjugate_cc_0_0, 0))
+        self.connect((self.uhd_usrp_source_0_0, 0), (self.blocks_multiply_conjugate_cc_0, 0))
         self.connect((self.usrp_ble_capture_gate_0, 0), (self.blocks_file_sink_0, 0))
         self.connect((self.usrp_ble_capture_gate_0_0, 0), (self.blocks_file_sink_0_0, 0))
         self.connect((self.usrp_ble_capture_gate_1, 0), (self.blocks_file_sink_1, 0))
@@ -213,7 +242,7 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
 
 
     def closeEvent(self, event):
-        self.settings = Qt.QSettings("GNU Radio", "ble_cs_1to1")
+        self.settings = Qt.QSettings("GNU Radio", "ble_cs_1to1_2sides")
         self.settings.setValue("geometry", self.saveGeometry())
         self.stop()
         self.wait()
@@ -269,8 +298,8 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
 
     def set_send_gain(self, send_gain):
         self.send_gain = send_gain
+        self.uhd_usrp_sink_0_0_0.set_gain(self.send_gain, 0)
         self.uhd_usrp_sink_0_0_0_0.set_gain(self.send_gain, 0)
-        self.uhd_usrp_sink_0_0_0_0.set_gain(self.send_gain, 1)
 
     def get_samp_rate(self):
         return self.samp_rate
@@ -278,12 +307,14 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
     def set_samp_rate(self, samp_rate):
         self.samp_rate = samp_rate
         self.analog_sig_source_x_0_1.set_sampling_freq(self.samp_rate)
+        self.uhd_usrp_sink_0_0_0.set_samp_rate(self.samp_rate)
+        self.uhd_usrp_sink_0_0_0.set_bandwidth(self.samp_rate, 0)
         self.uhd_usrp_sink_0_0_0_0.set_samp_rate(self.samp_rate)
         self.uhd_usrp_sink_0_0_0_0.set_bandwidth(self.samp_rate, 0)
-        self.uhd_usrp_sink_0_0_0_0.set_bandwidth(self.samp_rate, 1)
+        self.uhd_usrp_source_0.set_samp_rate(self.samp_rate)
+        self.uhd_usrp_source_0.set_bandwidth(self.samp_rate, 0)
         self.uhd_usrp_source_0_0.set_samp_rate(self.samp_rate)
         self.uhd_usrp_source_0_0.set_bandwidth(self.samp_rate, 0)
-        self.uhd_usrp_source_0_0.set_bandwidth(self.samp_rate, 1)
         self.usrp_ble_data_send_0.set_sample_rate(self.samp_rate)
         self.usrp_ble_data_send_0_0.set_sample_rate(self.samp_rate)
 
@@ -298,23 +329,23 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
 
     def set_recv_gain(self, recv_gain):
         self.recv_gain = recv_gain
+        self.uhd_usrp_source_0.set_gain(self.recv_gain, 0)
         self.uhd_usrp_source_0_0.set_gain(self.recv_gain, 0)
-        self.uhd_usrp_source_0_0.set_gain(self.recv_gain, 1)
 
     def get_centetr_fre(self):
         return self.centetr_fre
 
     def set_centetr_fre(self, centetr_fre):
         self.centetr_fre = centetr_fre
+        self.uhd_usrp_sink_0_0_0.set_center_freq(self.centetr_fre, 0)
         self.uhd_usrp_sink_0_0_0_0.set_center_freq(self.centetr_fre, 0)
-        self.uhd_usrp_sink_0_0_0_0.set_center_freq(self.centetr_fre, 1)
+        self.uhd_usrp_source_0.set_center_freq(self.centetr_fre, 0)
         self.uhd_usrp_source_0_0.set_center_freq(self.centetr_fre, 0)
-        self.uhd_usrp_source_0_0.set_center_freq(self.centetr_fre, 1)
 
 
 
 
-def main(top_block_cls=ble_cs_1to1, options=None):
+def main(top_block_cls=ble_cs_1to1_2sides, options=None):
 
     if StrictVersion("4.5.0") <= StrictVersion(Qt.qVersion()) < StrictVersion("5.0.0"):
         style = gr.prefs().get_string('qtgui', 'style', 'raster')
