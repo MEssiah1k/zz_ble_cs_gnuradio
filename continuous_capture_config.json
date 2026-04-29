@@ -26,7 +26,7 @@
     "min_segment_len": 64,
     "edge_trim_samples": 16,
     "assignment_mode": "sequential",
-    "cfo_compensate": true,
+    "cfo_compensate": false,
     "jobs": 0,
     "no_burst_plots": false,
     "distance_step_m": 0.01,
@@ -38,7 +38,22 @@
   "roots": {
     "1to1": {
       "root": "1to1",
-      "sample_rate": 10000000.0
+      "sample_rate": 10000000.0,
+      "calibration_reference_m": 2.0,
+      "capture_groups": [
+        {
+          "label": "calibration",
+          "distance_m": 2.0,
+          "reflector_file": "data_reflector_rx_from_initiator_calibration",
+          "initiator_file": "data_initiator_rx_from_reflector_calibration"
+        },
+        {
+          "label": "measurement",
+          "distance_m": 4.0,
+          "reflector_file": "data_reflector_rx_from_initiator_measurement",
+          "initiator_file": "data_initiator_rx_from_reflector_measurement"
+        }
+      ]
     },
     "1to1_2sides": {
       "root": "1to1_2sides",

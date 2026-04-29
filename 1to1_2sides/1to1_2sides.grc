@@ -284,7 +284,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [2016, 980.0]
+    coordinate: [2008, 972.0]
     rotation: 0
     state: enabled
 - name: blocks_message_debug_0
@@ -2015,7 +2015,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1864, 676.0]
+    coordinate: [1864, 612.0]
     rotation: 0
     state: disabled
 - name: usrp_ble_data_store_0_0

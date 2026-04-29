@@ -40,7 +40,8 @@ namespace gr {
                        int start_freq_index,
                        int stop_freq_index,
                        double step_hz,
-                       int capture_groups = 1);
+                       int capture_groups = 1,
+                       float rx_tail_time_ms = 0.0f);
       
       virtual void set_start_btn(bool start_btn) = 0;
       virtual void set_stop_btn(bool stop_btn) = 0;
@@ -50,6 +51,7 @@ namespace gr {
       virtual void set_stop_freq_index(int stop_freq_index) = 0;
       virtual void set_step_hz(double step_hz) = 0;
       virtual void set_capture_groups(int capture_groups) = 0;
+      virtual void set_rx_tail_time_ms(float rx_tail_time_ms) = 0;
     };
 
   } // namespace usrp_ble

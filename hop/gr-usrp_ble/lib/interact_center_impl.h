@@ -51,12 +51,14 @@ namespace gr {
         idle = 0,
         phase1,
         phase2,
+        rx_tail,
       };
 
       int _sample_rate;              // 输入采样率，用于把毫秒等待时长换算成采样点数量
       bool _start_btn;               // 开始按钮当前状态，用于检测上升沿启动
       bool _stop_btn;                // 停止按钮当前状态，用于检测上升沿停止
       float _wait_time_ms;           // 每个阶段的目标等待时间，单位毫秒
+      float _rx_tail_time_ms;        // 发完当前频点后，切频前继续等待接收尾巴的时间
       int _repeat_total;             // 每个频点需要重复采集的总次数
       int _repeat_index;             // 当前频点已经进行到第几次重复（从 0 开始）
       int _capture_group_total;      // 连续捕获总组数，目前支持 1 或 2 组
@@ -68,6 +70,7 @@ namespace gr {
       bool _is_running;              // 整个实验流程是否正在运行
       bool _use_msg_clock;           // 是否使用消息计时，self_2 用真实 burst 消费量推进状态机
       size_t _phase_samples;         // 每个发送阶段应等待的总采样点数量
+      size_t _rx_tail_samples;       // 切频前保留当前 NCO 的接收尾巴等待样本数
       size_t _wait_counter;          // 当前阶段已经累计等待的采样点数量
       state_t _state;                // 状态机当前阶段
       double _current_freq;          // 当前扫频频点，会通过消息端口发给外部频率控制对象
@@ -80,6 +83,7 @@ namespace gr {
       void process_state_machine(int nitems);
       void handle_clock_msg(pmt::pmt_t msg);
       void refresh_sample_counts();
+      void finish_rx_tail();
 
       /*
        * 函数说明：
@@ -105,6 +109,7 @@ namespace gr {
        * 函数说明：
        * 停止所有被调度的子模块，确保系统恢复到静默态。
        */
+      void send_data_stop();
       void send_all_stop();
       void send_capture_start_for_current_group();
       void send_capture_stop_for_current_group();
@@ -130,7 +135,8 @@ namespace gr {
                            int start_freq_index,
                            int stop_freq_index,
                            double step_hz,
-                           int capture_groups);
+                           int capture_groups,
+                           float rx_tail_time_ms);
       ~interact_center_impl();
       
       void set_start_btn(bool start_btn) override;
@@ -141,6 +147,7 @@ namespace gr {
       void set_stop_freq_index(int stop_freq_index) override;
       void set_step_hz(double step_hz) override;
       void set_capture_groups(int capture_groups) override;
+      void set_rx_tail_time_ms(float rx_tail_time_ms) override;
 
       /*
        * 函数说明：

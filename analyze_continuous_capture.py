@@ -26,6 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "1to1_rfhop"
 DEFAULT_PLOT_ROOT = PROJECT_ROOT / "output_analyze_continuous"
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "continuous_capture_config.json"
+TWO_PI = 2.0 * np.pi
 DEFAULT_CAPTURE_GROUPS = [
     {
         "label": "2m",
@@ -405,14 +406,12 @@ def summarize_segment(
     cfo_hz = 0.0
     cfo_slope_rad_per_sample = 0.0
     segment_for_stats = segment
-    if cfo_compensate and segment.size >= 2:
-        segment_for_stats, cfo_hz, cfo_slope_rad_per_sample = compensate_cfo_slope_only(segment, sample_rate)
     cluster = phase_cluster_stats(segment_for_stats)
     classification = classify_signal(segment_for_stats)
     z_mean, robust_samples, outlier_samples = robust_complex_mean(segment_for_stats)
     return {
         "selection": selection,
-        "cfo_compensated": bool(cfo_compensate),
+        "cfo_compensated": False,
         "cfo_hz": float(cfo_hz),
         "cfo_slope_rad_per_sample": float(cfo_slope_rad_per_sample),
         "edge_trim_requested_samples": int(requested_edge_trim),
@@ -441,22 +440,6 @@ def summarize_segment(
         "robust_mean_abs": float(abs(z_mean)),
         "robust_mean_phase": float(np.angle(z_mean)) if abs(z_mean) > 0 else 0.0,
     }
-
-
-def compensate_cfo_slope_only(segment: np.ndarray, sample_rate: float) -> tuple[np.ndarray, float, float]:
-    """Estimate per-burst CFO and remove only the phase slope.
-
-    The constant phase term is intentionally preserved because downstream distance
-    estimation needs the burst's mean phase.
-    """
-    if segment.size < 2:
-        return segment, 0.0, 0.0
-    n = np.arange(segment.size, dtype=np.float64)
-    phase = np.unwrap(np.angle(segment))
-    slope, _intercept = np.polyfit(n, phase, 1)
-    corrected = segment * np.exp(-1j * float(slope) * n)
-    cfo_hz = float(slope) * float(sample_rate) / (2.0 * np.pi)
-    return corrected, float(cfo_hz), float(slope)
 
 
 def _summarize_candidate_task(task: tuple[int, int, int, np.ndarray, int, int, bool, float]) -> dict[str, Any]:
@@ -1386,8 +1369,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cfo-compensate",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="对每个 burst 单独估计一阶 CFO 并只去掉相位斜率，保留平均相位",
+        default=False,
+        help="兼容旧命令的参数；当前时钟同步后不再对单个 burst 做斜率补偿",
     )
     parser.add_argument("--jobs", type=int, default=0, help="并行分析 worker 数；0 表示自动使用 CPU 核数")
     parser.add_argument("--no-burst-plots", action="store_true", help="不保存每个 burst 的单独 PNG，只保存总览图和 CSV/JSON")
@@ -1526,6 +1509,99 @@ def _distance_float_for_summary(result: dict[str, Any], key: str) -> float | Non
     return float(value["distance_m"])
 
 
+def wrap_to_pi(value: np.ndarray | float) -> np.ndarray | float:
+    return (np.asarray(value) + np.pi) % TWO_PI - np.pi
+
+
+def unwrap_with_negative_slope_prior(
+    phases_wrapped: np.ndarray,
+    *,
+    upward_tolerance_rad: float = 0.2,
+) -> np.ndarray:
+    phases = np.asarray(phases_wrapped, dtype=float)
+    if phases.size <= 1:
+        return phases.copy()
+
+    unwrapped = np.empty_like(phases)
+    unwrapped[0] = phases[0]
+    for idx in range(1, phases.size):
+        value = float(phases[idx])
+        prev = float(unwrapped[idx - 1])
+        while value > prev + float(upward_tolerance_rad):
+            value -= TWO_PI
+        unwrapped[idx] = value
+    return unwrapped
+
+
+def estimate_calibrated_distance_from_phase_delta(
+    calibration: dict[str, Any],
+    measurement: dict[str, Any],
+    *,
+    calibration_reference_m: float,
+    propagation_speed_mps: float,
+    unwrap_upward_tolerance_rad: float,
+) -> dict[str, Any] | None:
+    calibration_rows = {
+        int(row["freq_index"]): row
+        for row in calibration.get("pair_phase_by_freq", [])
+        if "freq_index" in row and "pair_phase_rad" in row
+    }
+    measurement_rows = {
+        int(row["freq_index"]): row
+        for row in measurement.get("pair_phase_by_freq", [])
+        if "freq_index" in row and "pair_phase_rad" in row
+    }
+    common_freq_indices = sorted(set(calibration_rows) & set(measurement_rows))
+    if len(common_freq_indices) < 2:
+        return None
+
+    freqs_hz = np.array(
+        [float(measurement_rows[freq_index]["freq_hz"]) for freq_index in common_freq_indices],
+        dtype=float,
+    )
+    delta_wrapped = np.array(
+        [
+            float(wrap_to_pi(
+                float(measurement_rows[freq_index]["pair_phase_rad"])
+                - float(calibration_rows[freq_index]["pair_phase_rad"])
+            ))
+            for freq_index in common_freq_indices
+        ],
+        dtype=float,
+    )
+    delta_unwrapped = np.unwrap(delta_wrapped)
+    slope, intercept = np.polyfit(freqs_hz, delta_unwrapped, 1)
+    fitted = slope * freqs_hz + intercept
+    residual = delta_unwrapped - fitted
+    relative_distance_m = -float(propagation_speed_mps) * float(slope) / (4.0 * np.pi)
+    calibrated_measurement_m = relative_distance_m + float(calibration_reference_m)
+
+    distance_step_m = 0.01
+    distance_grid = np.arange(relative_distance_m - 10.0, relative_distance_m + 10.0 + distance_step_m, distance_step_m)
+    costs = np.empty(distance_grid.size, dtype=float)
+    for idx, distance_m in enumerate(distance_grid):
+        model_phase = -4.0 * np.pi * freqs_hz * float(distance_m) / float(propagation_speed_mps)
+        phase0 = float(np.angle(np.mean(np.exp(1j * (delta_wrapped - model_phase)))))
+        wrapped_error = np.asarray(wrap_to_pi(delta_wrapped - (model_phase + phase0)), dtype=float)
+        costs[idx] = float(np.mean(wrapped_error ** 2))
+    best_index = int(np.argmin(costs))
+    match_relative_distance_m = float(distance_grid[best_index])
+    match_relative_distance_m = round(match_relative_distance_m / distance_step_m) * distance_step_m
+    return {
+        "common_freq_count": int(len(common_freq_indices)),
+        "unwrap_method": "np.unwrap_after_wrapped_phase_delta",
+        "relative_distance_m": float(relative_distance_m),
+        "calibrated_measurement_m": float(calibrated_measurement_m),
+        "phase_match_relative_distance_m": float(match_relative_distance_m),
+        "phase_match_calibrated_measurement_m": float(match_relative_distance_m + float(calibration_reference_m)),
+        "phase_match_rms_error": float(np.sqrt(costs[best_index])),
+        "slope_rad_per_hz": float(slope),
+        "intercept_rad": float(intercept),
+        "rms_phase_residual": float(np.sqrt(np.mean(residual ** 2))),
+        "max_abs_phase_residual": float(np.max(np.abs(residual))),
+    }
+
+
 def print_calibrated_measurement_summary(
     results: list[dict[str, Any]],
     *,
@@ -1558,6 +1634,28 @@ def print_calibrated_measurement_summary(
             f"  {key}: measurement_raw={measurement_distance:.6f} m, "
             f"calibration_raw={calibration_distance:.6f} m, "
             f"calibrated_measurement={calibrated:.6f} m"
+        )
+
+    delta_result = estimate_calibrated_distance_from_phase_delta(
+        calibration,
+        measurement,
+        calibration_reference_m=float(calibration_reference_m),
+        propagation_speed_mps=float(calibration.get("analysis_parameters", {}).get("propagation_speed_mps", 2.3e8)),
+        unwrap_upward_tolerance_rad=float(calibration.get("analysis_parameters", {}).get("unwrap_upward_tolerance_rad", 0.2)),
+    )
+    if delta_result is None:
+        print("  phase_delta_fit: unavailable")
+    else:
+        print(
+            "  phase_delta_fit: common_freq_count={common_freq_count}, "
+            "relative_distance={relative_distance_m:.6f} m, "
+            "calibrated_measurement={calibrated_measurement_m:.6f} m, "
+            "rms_residual={rms_phase_residual:.6f} rad".format(**delta_result)
+        )
+        print(
+            "  phase_delta_match: relative_distance={phase_match_relative_distance_m:.6f} m, "
+            "calibrated_measurement={phase_match_calibrated_measurement_m:.6f} m, "
+            "rms_error={phase_match_rms_error:.6f} rad".format(**delta_result)
         )
 
 
@@ -1650,6 +1748,8 @@ def run_capture_analysis(
             "edge_trim_samples": int(args.edge_trim_samples),
             "assignment_mode": str(args.assignment_mode),
             "cfo_compensate": bool(args.cfo_compensate),
+            "propagation_speed_mps": float(args.propagation_speed_mps),
+            "unwrap_upward_tolerance_rad": float(args.unwrap_upward_tolerance_rad),
             "jobs": int(args.jobs),
             "no_burst_plots": bool(args.no_burst_plots),
         },

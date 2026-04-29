@@ -5,7 +5,7 @@ category: '[usrp_ble]'
 templates:
   imports: from gnuradio import usrp_ble
   make: |-
-    usrp_ble.interact_center(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${repeat_total}, ${start_freq_index}, ${stop_freq_index}, ${step_hz}, ${capture_groups})
+    usrp_ble.interact_center(${sample_rate}, ${start_btn}, ${stop_btn}, ${wait_time_ms}, ${repeat_total}, ${start_freq_index}, ${stop_freq_index}, ${step_hz}, ${capture_groups}, ${rx_tail_time_ms})
     self.${id}.set_use_msg_clock(${use_msg_clock})
   callbacks:
   - set_start_btn(${start_btn})
@@ -16,6 +16,7 @@ templates:
   - set_stop_freq_index(${stop_freq_index})
   - set_step_hz(${step_hz})
   - set_capture_groups(${capture_groups})
+  - set_rx_tail_time_ms(${rx_tail_time_ms})
 
 #  Make one 'parameters' list entry for every parameter you want settable from the GUI.
 #     Keys include:
@@ -48,6 +49,10 @@ parameters:
   label: Capture Groups
   dtype: int
   default: 1
+- id: rx_tail_time_ms
+  label: RX Tail Before Hop (ms)
+  dtype: float
+  default: 0.0
 - id: start_freq_index
   label: Start Freq Index
   dtype: int

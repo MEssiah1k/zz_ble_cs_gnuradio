@@ -40,7 +40,8 @@ namespace gr {
                           int start_freq_index,
                           int stop_freq_index,
                           double step_hz,
-                          int capture_groups)
+                          int capture_groups,
+                          float rx_tail_time_ms)
     {
       return gnuradio::make_block_sptr<interact_center_impl>(
         sample_rate,
@@ -51,7 +52,8 @@ namespace gr {
         start_freq_index,
         stop_freq_index,
         step_hz,
-        capture_groups); // 交由具体实现类保存配置并初始化状态机
+        capture_groups,
+        rx_tail_time_ms); // 交由具体实现类保存配置并初始化状态机
     }
 
     // 构造函数：
@@ -66,7 +68,8 @@ namespace gr {
                                                int start_freq_index,
                                                int stop_freq_index,
                                                double step_hz,
-                                               int capture_groups)
+                                               int capture_groups,
+                                               float rx_tail_time_ms)
       : gr::sync_block("interact_center",
               gr::io_signature::make(1 /* min inputs */, 1 /* max inputs */, sizeof(input_type)), // 单输入口，用输入样本数作为“时间推进器”
               gr::io_signature::make(0 /* min outputs */, 0 /*max outputs */, 0)),                // 无输出口，因为这里只做消息调度
@@ -74,6 +77,7 @@ namespace gr {
         _start_btn(start_btn),      // 保存开始按钮初值
         _stop_btn(stop_btn),        // 保存停止按钮初值
         _wait_time_ms(wait_time_ms),// 保存阶段等待时长
+        _rx_tail_time_ms(rx_tail_time_ms),
         _repeat_total(std::max(1, repeat_total)), // 至少重复 1 次，避免非法参数破坏状态机
         _repeat_index(0),           // 每次启动都从当前频点的第一次重复开始
         _capture_group_total(std::max(1, capture_groups)),
@@ -85,6 +89,7 @@ namespace gr {
         _is_running(false),         // 初始状态机处于停止态
         _use_msg_clock(false),      // 默认沿用原来的流输入计时模式
         _phase_samples(0),
+        _rx_tail_samples(0),
         _wait_counter(0),           // 当前阶段累计等待计数清零
         _state(state_t::idle)       // 初始状态设为空闲态
     {
@@ -151,6 +156,12 @@ namespace gr {
         refresh_sample_counts();
     }
 
+    void interact_center_impl::set_rx_tail_time_ms(float rx_tail_time_ms)
+    {
+        _rx_tail_time_ms = rx_tail_time_ms;
+        refresh_sample_counts();
+    }
+
     void interact_center_impl::set_capture_groups(int capture_groups)
     {
         _capture_group_total = std::max(1, capture_groups);
@@ -198,6 +209,8 @@ namespace gr {
     {
         _phase_samples = static_cast<size_t>(
             std::max(0.0f, _wait_time_ms) * static_cast<float>(_sample_rate) / 1000.0f);
+        _rx_tail_samples = static_cast<size_t>(
+            std::max(0.0f, _rx_tail_time_ms) * static_cast<float>(_sample_rate) / 1000.0f);
     }
 
     void interact_center_impl::handle_clock_msg(pmt::pmt_t msg)
@@ -244,10 +257,16 @@ namespace gr {
     void interact_center_impl::send_all_stop()
     {
         // 一次性关闭所有受控块，用于人工停止或扫频结束。
-        message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_stop"));   // 停第一组发送
-        message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_stop"));   // 停第二组发送
+        send_data_stop();
         message_port_pub(pmt::mp("store1_ctrl"), pmt::intern("store_stop")); // 停第一组存储
         message_port_pub(pmt::mp("store2_ctrl"), pmt::intern("store_stop")); // 停第二组存储
+    }
+
+    void interact_center_impl::send_data_stop()
+    {
+        // 只停发送，不动接收/存储；用于切频前保留接收尾巴。
+        message_port_pub(pmt::mp("send1_ctrl"), pmt::intern("data_stop"));   // 停第一组发送
+        message_port_pub(pmt::mp("send2_ctrl"), pmt::intern("data_stop"));   // 停第二组发送
     }
 
     void interact_center_impl::send_capture_start_for_current_group()
@@ -327,6 +346,8 @@ namespace gr {
 
             if (_state == state_t::phase1 || _state == state_t::phase2) {
                 target = _phase_samples;
+            } else if (_state == state_t::rx_tail) {
+                target = _rx_tail_samples;
             } else {
                 items_processed += items_remaining;
                 continue;
@@ -341,36 +362,47 @@ namespace gr {
                     _state = state_t::phase2;
                     send_phase2_start();
                 } else if (_state == state_t::phase2) {
-                    if (_repeat_index + 1 < _repeat_total) {
-                        _repeat_index += 1;  // 同一频点进入下一次重复
-                        _state = state_t::phase1;
-                        send_phase1_start();
-                    } else {
-                        _repeat_index = 0;
-                        if (is_last_frequency()) {
-                            send_all_stop();
-                            send_capture_stop_for_current_group();
-                            _capture_group_index = (_capture_group_index + 1) % _capture_group_total;
-                            _is_running = false;
-                            _state = state_t::idle;
-                        } else {
-                            if (_start_freq_index <= _stop_freq_index) {
-                                _current_freq_index += 1;
-                            } else {
-                                _current_freq_index -= 1;
-                            }
-                            refresh_current_freq();
-                            send_freq_command();
-                            _state = state_t::phase1;
-                            send_phase1_start();
-                        }
-                    }
+                    send_data_stop();
+                    _state = state_t::rx_tail;
+                } else if (_state == state_t::rx_tail) {
+                    finish_rx_tail();
                 }
             } else {
                 _wait_counter += items_remaining;
                 items_processed += items_remaining;
             }
         }
+    }
+
+    void interact_center_impl::finish_rx_tail()
+    {
+        send_all_stop();
+
+        if (_repeat_index + 1 < _repeat_total) {
+            _repeat_index += 1;  // 同一频点进入下一次重复，频率不变
+            _state = state_t::phase1;
+            send_phase1_start();
+            return;
+        }
+
+        _repeat_index = 0;
+        if (is_last_frequency()) {
+            send_capture_stop_for_current_group();
+            _capture_group_index = (_capture_group_index + 1) % _capture_group_total;
+            _is_running = false;
+            _state = state_t::idle;
+            return;
+        }
+
+        if (_start_freq_index <= _stop_freq_index) {
+            _current_freq_index += 1;
+        } else {
+            _current_freq_index -= 1;
+        }
+        refresh_current_freq();
+        send_freq_command();
+        _state = state_t::phase1;
+        send_phase1_start();
     }
 
     int

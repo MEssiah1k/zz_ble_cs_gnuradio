@@ -47,6 +47,7 @@ void bind_interact_center(py::module& m)
            py::arg("stop_freq_index") = 40,
            py::arg("step_hz") = 1e6,
            py::arg("capture_groups") = 1,
+           py::arg("rx_tail_time_ms") = 0.0f,
            D(interact_center,make)
         )
         .def("set_start_btn", &interact_center::set_start_btn,
@@ -80,6 +81,10 @@ void bind_interact_center(py::module& m)
         .def("set_capture_groups", &interact_center::set_capture_groups,
             py::arg("capture_groups"),
             D(interact_center,set_capture_groups)
+        )
+        .def("set_rx_tail_time_ms", &interact_center::set_rx_tail_time_ms,
+            py::arg("rx_tail_time_ms"),
+            D(interact_center,set_rx_tail_time_ms)
         )
         
 

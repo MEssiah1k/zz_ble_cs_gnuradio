@@ -185,7 +185,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: '70'
+    value: '20'
   states:
     bus_sink: false
     bus_source: false
@@ -222,7 +222,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: Continuous reflector-side capture.
-    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator_2m
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator_calibration
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -240,7 +240,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: Continuous initiator-side capture.
-    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector_2m
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector_calibration
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -258,7 +258,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: Continuous reflector-side capture, second sweep group.
-    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator_4m
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator_measurement
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -276,7 +276,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: Continuous initiator-side capture, second sweep group.
-    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector_4m
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector_measurement
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -298,7 +298,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [960, 1136.0]
+    coordinate: [928, 1168.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_conjugate_cc_0
@@ -1024,7 +1024,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [776, 668.0]
+    coordinate: [808, 652.0]
     rotation: 0
     state: enabled
 - name: uhd_usrp_source_0
@@ -2001,7 +2001,7 @@ blocks:
     coordinate: [88, 768.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_data_store_initiator_2m
+- name: usrp_ble_data_store_initiator_calibration
   id: usrp_ble_data_store
   parameters:
     affinity: ''
@@ -2009,7 +2009,7 @@ blocks:
     capture_group_filter: '0'
     comment: ''
     data_len: int(200e0)
-    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/2m/data_initiator_rx_from_reflector
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/calibration/data_initiator_rx_from_reflector
     skip_len: int(60/1000*samp_rate)
   states:
     bus_sink: false
@@ -2017,8 +2017,8 @@ blocks:
     bus_structure: null
     coordinate: [1960, 1100.0]
     rotation: 0
-    state: enabled
-- name: usrp_ble_data_store_initiator_4m
+    state: disabled
+- name: usrp_ble_data_store_initiator_measurement
   id: usrp_ble_data_store
   parameters:
     affinity: ''
@@ -2026,7 +2026,7 @@ blocks:
     capture_group_filter: '1'
     comment: ''
     data_len: int(200e0)
-    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/4m/data_initiator_rx_from_reflector
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/measurement/data_initiator_rx_from_reflector
     skip_len: int(60/1000*samp_rate)
   states:
     bus_sink: false
@@ -2034,8 +2034,8 @@ blocks:
     bus_structure: null
     coordinate: [2168, 884.0]
     rotation: 0
-    state: enabled
-- name: usrp_ble_data_store_reflector_2m
+    state: disabled
+- name: usrp_ble_data_store_reflector_calibration
   id: usrp_ble_data_store
   parameters:
     affinity: ''
@@ -2043,7 +2043,7 @@ blocks:
     capture_group_filter: '0'
     comment: ''
     data_len: int(200e0)
-    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/2m/data_reflector_rx_from_initiator
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/calibration/data_reflector_rx_from_initiator
     skip_len: int(60/1000*samp_rate)
   states:
     bus_sink: false
@@ -2051,8 +2051,8 @@ blocks:
     bus_structure: null
     coordinate: [2048, 524.0]
     rotation: 0
-    state: enabled
-- name: usrp_ble_data_store_reflector_4m
+    state: disabled
+- name: usrp_ble_data_store_reflector_measurement
   id: usrp_ble_data_store
   parameters:
     affinity: ''
@@ -2060,7 +2060,7 @@ blocks:
     capture_group_filter: '1'
     comment: ''
     data_len: int(200e0)
-    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/4m/data_reflector_rx_from_initiator
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/measurement/data_reflector_rx_from_initiator
     skip_len: int(60/1000*samp_rate)
   states:
     bus_sink: false
@@ -2068,7 +2068,7 @@ blocks:
     bus_structure: null
     coordinate: [2120, 756.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: usrp_ble_interact_center_0
   id: usrp_ble_interact_center
   parameters:
@@ -2079,6 +2079,7 @@ blocks:
     maxoutbuf: '0'
     minoutbuf: '0'
     repeat_total: repeat_total
+    rx_tail_time_ms: '50'
     sample_rate: int(samp_rate)
     start_btn: start_button
     start_freq_index: start_freq_index
@@ -2110,13 +2111,13 @@ connections:
 - [uhd_usrp_source_0_0, '0', blocks_multiply_conjugate_cc_0_0, '0']
 - [uhd_usrp_source_0_0, '1', blocks_multiply_conjugate_cc_0, '0']
 - [usrp_ble_capture_gate_0, '0', blocks_file_sink_0, '0']
-- [usrp_ble_capture_gate_0, '0', usrp_ble_data_store_reflector_2m, '0']
+- [usrp_ble_capture_gate_0, '0', usrp_ble_data_store_reflector_calibration, '0']
 - [usrp_ble_capture_gate_0_0, '0', blocks_file_sink_0_0, '0']
-- [usrp_ble_capture_gate_0_0, '0', usrp_ble_data_store_initiator_2m, '0']
+- [usrp_ble_capture_gate_0_0, '0', usrp_ble_data_store_initiator_calibration, '0']
 - [usrp_ble_capture_gate_1, '0', blocks_file_sink_1, '0']
-- [usrp_ble_capture_gate_1, '0', usrp_ble_data_store_reflector_4m, '0']
+- [usrp_ble_capture_gate_1, '0', usrp_ble_data_store_reflector_measurement, '0']
 - [usrp_ble_capture_gate_1_0, '0', blocks_file_sink_1_0, '0']
-- [usrp_ble_capture_gate_1_0, '0', usrp_ble_data_store_initiator_4m, '0']
+- [usrp_ble_capture_gate_1_0, '0', usrp_ble_data_store_initiator_measurement, '0']
 - [usrp_ble_data_send_0, '0', blocks_multiply_xx_0, '1']
 - [usrp_ble_data_send_0, '0', usrp_ble_interact_center_0, '0']
 - [usrp_ble_data_send_0_0, '0', blocks_multiply_xx_0_0, '1']
@@ -2128,10 +2129,14 @@ connections:
 - [usrp_ble_interact_center_0, freq_ctrl, blocks_message_debug_0, print]
 - [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_data_send_0, command]
 - [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_data_send_0_0, command]
-- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_reflector_2m, command]
-- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_reflector_4m, command]
-- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_initiator_2m, command]
-- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_initiator_4m, command]
+- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_reflector_calibration,
+  command]
+- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_reflector_measurement,
+  command]
+- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_initiator_calibration,
+  command]
+- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_initiator_measurement,
+  command]
 
 metadata:
   file_format: 1
