@@ -693,7 +693,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/self_2/data_reflector2_rx_from_initiator
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/self_2/data_reflector2_rx_from_initiator
     skip_len: '35000'
   states:
     bus_sink: false
@@ -709,7 +709,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/self_2/data_reflector1_rx_from_initiator
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/self_2/data_reflector1_rx_from_initiator
     skip_len: '35000'
   states:
     bus_sink: false
@@ -725,7 +725,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/mess1ah/zz_ble_cs_gnuradio/self_2/data_initiator_rx_from_reflectors
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/self_2/data_initiator_rx_from_reflectors
     skip_len: '50000'
   states:
     bus_sink: false

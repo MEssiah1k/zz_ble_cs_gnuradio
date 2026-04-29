@@ -37,17 +37,17 @@ namespace gr {
      * 这是 GNU Radio 常见的 make() 包装，用于隐藏具体实现类并统一创建对象。
      */
     data_store::sptr
-    data_store::make(int data_len, int skip_len, const std::string& path)
+    data_store::make(int data_len, int skip_len, const std::string& path, int capture_group_filter)
     {
       return gnuradio::make_block_sptr<data_store_impl>(
-        data_len, skip_len, path); // 把外部配置参数原样传给具体实现类构造函数
+        data_len, skip_len, path, capture_group_filter); // 把外部配置参数原样传给具体实现类构造函数
     }
 
     // 构造函数：
     // 1. 声明该块为单输入、零输出的 sync_block
     // 2. 保存配置参数
     // 3. 注册消息输入端口，用于接收开始/停止保存命令
-    data_store_impl::data_store_impl(int data_len, int skip_len, const std::string& path)
+    data_store_impl::data_store_impl(int data_len, int skip_len, const std::string& path, int capture_group_filter)
       : gr::sync_block("data_store",
               gr::io_signature::make(1 /* min inputs */, 1 /* max inputs */, sizeof(input_type)), // 单输入口，输入类型是 gr_complex
               gr::io_signature::make(0 /* min outputs */, 0 /*max outputs */, 0)),                // 零输出口，因为这是 sink block
@@ -56,6 +56,8 @@ namespace gr {
         _path(path),                    // 保存目录路径
         _freq_index(-1),                // 默认没有收到频点元信息
         _repeat_index(-1),              // 默认没有收到重复元信息
+        _capture_group_index(-1),       // 默认没有收到采集组元信息
+        _capture_group_filter(capture_group_filter), // 默认不过滤采集组
         _is_saving(false),              // 初始状态下不保存
         _is_skipping(false),            // 初始时不处于跳过前导样本阶段
         _skipped_samples_count(0),      // 初始时前导样本跳过计数为 0
@@ -84,8 +86,14 @@ namespace gr {
             if (pmt::is_symbol(cmd_val) && pmt::symbol_to_string(cmd_val) == "store_start") {
                 pmt::pmt_t freq_val = pmt::dict_ref(msg, pmt::intern("freq_index"), pmt::from_long(-1));
                 pmt::pmt_t repeat_val = pmt::dict_ref(msg, pmt::intern("repeat_index"), pmt::from_long(-1));
+                pmt::pmt_t group_val = pmt::dict_ref(msg, pmt::intern("capture_group_index"), pmt::from_long(-1));
                 _freq_index = pmt::to_long(freq_val);
                 _repeat_index = pmt::to_long(repeat_val);
+                _capture_group_index = pmt::to_long(group_val);
+                if (_capture_group_filter >= 0 && _capture_group_index != _capture_group_filter) {
+                    stop_saving();
+                    return;
+                }
                 start_saving();
             }
         } else if (pmt::is_symbol(msg)) {
@@ -93,6 +101,11 @@ namespace gr {
             if (cmd == "store_start") {
                 _freq_index = -1;
                 _repeat_index = -1;
+                _capture_group_index = -1;
+                if (_capture_group_filter >= 0) {
+                    stop_saving();
+                    return;
+                }
                 start_saving(); // 开始一次新的保存任务
             } else if (cmd == "store_stop") {
                 stop_saving(); // 立即停止当前保存任务

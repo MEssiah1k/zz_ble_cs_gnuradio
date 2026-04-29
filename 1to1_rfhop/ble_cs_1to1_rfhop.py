@@ -195,7 +195,7 @@ class BleCs1To1RfHop(gr.top_block):
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", default="/home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop")
+    parser.add_argument("--root", default="/home/lfy/workarea/zz_ble_cs_gnuradio/1to1_rfhop")
     parser.add_argument("--addr", default="192.168.30.2")
     parser.add_argument("--subdev", default="A:0 B:0")
     parser.add_argument("--rx-antenna", default="RX2")

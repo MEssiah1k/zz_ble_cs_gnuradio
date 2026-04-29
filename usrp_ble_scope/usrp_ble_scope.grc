@@ -125,7 +125,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/ubuntu/zz_ble_cs_gnuradio/usrp_ble_scope/ble_cs_scope_ch0.c64
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/usrp_ble_scope/ble_cs_scope_ch0.c64
     type: complex
     unbuffered: 'False'
     vlen: '1'

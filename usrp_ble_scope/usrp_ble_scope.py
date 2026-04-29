@@ -221,7 +221,7 @@ class usrp_ble_scope(gr.top_block, Qt.QWidget):
         self._qtgui_freq_sink_x_0_win = sip.wrapinstance(self.qtgui_freq_sink_x_0.qwidget(), Qt.QWidget)
         self.top_layout.addWidget(self._qtgui_freq_sink_x_0_win)
         self.blocks_head_0 = blocks.head(gr.sizeof_gr_complex*1, capture_samples)
-        self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/ubuntu/zz_ble_cs_gnuradio/usrp_ble_scope/ble_cs_scope_ch0.c64', False)
+        self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_gr_complex*1, '/home/lfy/workarea/zz_ble_cs_gnuradio/usrp_ble_scope/ble_cs_scope_ch0.c64', False)
         self.blocks_file_sink_0.set_unbuffered(False)
         self.blocks_complex_to_mag_0 = blocks.complex_to_mag(1)
 

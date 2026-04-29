@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import csv
 import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -39,12 +40,29 @@ DEFAULT_CAPTURE_GROUPS = [
         "initiator_file": "data_initiator_rx_from_reflector_4m",
     },
 ]
+
+
+def progress_enabled(args: argparse.Namespace | None = None) -> bool:
+    return not bool(getattr(args, "no_progress", False))
+
+
+def progress_log(message: str, args: argparse.Namespace | None = None) -> None:
+    if progress_enabled(args):
+        print(f"[progress] {message}", file=sys.stderr, flush=True)
+
+
+def progress_interval(total: int) -> int:
+    if total <= 20:
+        return 1
+    return max(1, total // 20)
 PAIR_FREQ_CSV_FIELDS = [
     "freq_index",
     "freq_hz",
     "pair_abs",
     "pair_angle_rad",
     "pair_phase_rad",
+    "pair_repeat_count",
+    "pair_repeat_phase_spread_rad",
     "initiator_abs",
     "initiator_angle_rad",
     "reflector_abs",
@@ -151,6 +169,58 @@ def load_config(path: Path | None) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise SystemExit(f"配置文件必须是 JSON object: {resolved}")
     return data
+
+
+def _root_config_key(root: Any) -> str:
+    root_path = Path(str(root))
+    return root_path.name if root_path.name else str(root)
+
+
+def _cli_root_was_provided() -> bool:
+    return any(arg == "--root" or arg.startswith("--root=") for arg in sys.argv[1:])
+
+
+def select_config_for_root(
+    config: dict[str, Any],
+    requested_root: Any,
+    *,
+    root_was_provided: bool = True,
+) -> tuple[dict[str, Any], str | None]:
+    """Return defaults for the requested root.
+
+    New format:
+      {
+        "defaults": {...},
+        "roots": {
+          "1to1": {...},
+          "1to1_2sides": {...}
+        }
+      }
+
+    The old single-root format is returned unchanged.
+    """
+    profiles = config.get("roots") or config.get("profiles")
+    if not isinstance(profiles, dict):
+        return config, None
+
+    root_key = _root_config_key(requested_root)
+    if not root_was_provided:
+        root_key = str(config.get("default_root", root_key))
+
+    profile = profiles.get(root_key)
+    if profile is None:
+        available = ", ".join(sorted(str(key) for key in profiles))
+        raise SystemExit(f"配置文件里找不到 root={root_key!r}；可用 root: {available}")
+    if not isinstance(profile, dict):
+        raise SystemExit(f"root={root_key!r} 的配置必须是 JSON object")
+
+    selected: dict[str, Any] = {}
+    defaults = config.get("defaults", {})
+    if isinstance(defaults, dict):
+        selected.update(defaults)
+    selected.update(profile)
+    selected.setdefault("root", root_key)
+    return selected, root_key
 
 
 def apply_config_defaults(parser: argparse.ArgumentParser, config: dict[str, Any]) -> None:
@@ -317,6 +387,8 @@ def summarize_segment(
     *,
     min_segment_len: int,
     edge_trim_samples: int = 0,
+    cfo_compensate: bool = False,
+    sample_rate: float = 1.0,
 ) -> dict[str, Any]:
     raw_cluster = phase_cluster_stats(x)
     raw_classification = classify_signal(x)
@@ -330,11 +402,19 @@ def summarize_segment(
         core_start += edge_trim_applied
         core_stop -= edge_trim_applied
     segment = x[core_start:core_stop]
-    cluster = phase_cluster_stats(segment)
-    classification = classify_signal(segment)
-    z_mean, robust_samples, outlier_samples = robust_complex_mean(segment)
+    cfo_hz = 0.0
+    cfo_slope_rad_per_sample = 0.0
+    segment_for_stats = segment
+    if cfo_compensate and segment.size >= 2:
+        segment_for_stats, cfo_hz, cfo_slope_rad_per_sample = compensate_cfo_slope_only(segment, sample_rate)
+    cluster = phase_cluster_stats(segment_for_stats)
+    classification = classify_signal(segment_for_stats)
+    z_mean, robust_samples, outlier_samples = robust_complex_mean(segment_for_stats)
     return {
         "selection": selection,
+        "cfo_compensated": bool(cfo_compensate),
+        "cfo_hz": float(cfo_hz),
+        "cfo_slope_rad_per_sample": float(cfo_slope_rad_per_sample),
         "edge_trim_requested_samples": int(requested_edge_trim),
         "edge_trim_applied_samples": int(edge_trim_applied),
         "core_offset_start": int(core_start),
@@ -352,8 +432,8 @@ def summarize_segment(
         "segment_phase_std": float(cluster["cluster_phase_std"]),
         "segment_phase_p95_abs": float(cluster["cluster_phase_p95_abs"]),
         "segment_phase_max_abs": float(cluster["cluster_phase_max_abs"]),
-        "segment_mean_abs": float(np.mean(np.abs(segment))) if segment.size else 0.0,
-        "segment_max_abs": float(np.max(np.abs(segment))) if segment.size else 0.0,
+        "segment_mean_abs": float(np.mean(np.abs(segment_for_stats))) if segment_for_stats.size else 0.0,
+        "segment_max_abs": float(np.max(np.abs(segment_for_stats))) if segment_for_stats.size else 0.0,
         "robust_samples": int(robust_samples),
         "outlier_samples": int(outlier_samples),
         "robust_mean_i": float(np.real(z_mean)),
@@ -363,12 +443,30 @@ def summarize_segment(
     }
 
 
-def _summarize_candidate_task(task: tuple[int, int, int, np.ndarray, int, int]) -> dict[str, Any]:
-    candidate_index, start, stop, raw_segment, min_segment_len, edge_trim_samples = task
+def compensate_cfo_slope_only(segment: np.ndarray, sample_rate: float) -> tuple[np.ndarray, float, float]:
+    """Estimate per-burst CFO and remove only the phase slope.
+
+    The constant phase term is intentionally preserved because downstream distance
+    estimation needs the burst's mean phase.
+    """
+    if segment.size < 2:
+        return segment, 0.0, 0.0
+    n = np.arange(segment.size, dtype=np.float64)
+    phase = np.unwrap(np.angle(segment))
+    slope, _intercept = np.polyfit(n, phase, 1)
+    corrected = segment * np.exp(-1j * float(slope) * n)
+    cfo_hz = float(slope) * float(sample_rate) / (2.0 * np.pi)
+    return corrected, float(cfo_hz), float(slope)
+
+
+def _summarize_candidate_task(task: tuple[int, int, int, np.ndarray, int, int, bool, float]) -> dict[str, Any]:
+    candidate_index, start, stop, raw_segment, min_segment_len, edge_trim_samples, cfo_compensate, sample_rate = task
     summary = summarize_segment(
         raw_segment,
         min_segment_len=min_segment_len,
         edge_trim_samples=edge_trim_samples,
+        cfo_compensate=cfo_compensate,
+        sample_rate=sample_rate,
     )
     core_start = int(summary["core_offset_start"])
     core_stop = int(summary["core_offset_stop"])
@@ -397,6 +495,7 @@ def _summarize_candidate_task(task: tuple[int, int, int, np.ndarray, int, int]) 
 def detect_capture_bursts(
     capture: np.ndarray,
     *,
+    direction: str = "capture",
     repeats: int,
     start_offset_hz: float,
     step_hz: float,
@@ -408,7 +507,13 @@ def detect_capture_bursts(
     expected_bursts: int,
     edge_trim_samples: int = 0,
     jobs: int = 1,
+    progress: bool = True,
+    cfo_compensate: bool = False,
+    sample_rate: float = 1.0,
+    assignment_mode: str = "sequential",
 ) -> list[dict[str, Any]]:
+    if progress:
+        print(f"[progress] {direction}: computing amplitude envelope ({capture.size} samples)", file=sys.stderr, flush=True)
     amp = np.abs(capture)
     amp_smooth = moving_average(amp, smooth_len)
     noise_floor = float(np.percentile(amp_smooth, 20)) if amp_smooth.size else 0.0
@@ -416,7 +521,7 @@ def detect_capture_bursts(
     threshold = noise_floor + float(threshold_ratio) * max(0.0, signal_level - noise_floor)
     mask = _merge_short_gaps(amp_smooth >= threshold, gap_tolerance)
 
-    tasks: list[tuple[int, int, int, np.ndarray, int, int]] = []
+    tasks: list[tuple[int, int, int, np.ndarray, int, int, bool, float]] = []
     for candidate_index, (start, stop) in enumerate(_true_runs(mask)):
         raw_len = stop - start
         if raw_len < min_segment_len:
@@ -429,18 +534,46 @@ def detect_capture_bursts(
                 capture[start:stop],
                 int(min_segment_len),
                 int(edge_trim_samples),
+                bool(cfo_compensate),
+                float(sample_rate),
             )
         )
 
+    if progress:
+        print(
+            f"[progress] {direction}: found {len(tasks)} candidate bursts, expected {expected_bursts}",
+            file=sys.stderr,
+            flush=True,
+        )
     worker_count = max(1, int(jobs))
     if worker_count > 1 and len(tasks) > 1:
         worker_count = min(worker_count, len(tasks))
-        chunksize = max(1, len(tasks) // (worker_count * 4))
+        candidates = []
         with ProcessPoolExecutor(max_workers=worker_count) as executor:
-            candidates = list(executor.map(_summarize_candidate_task, tasks, chunksize=chunksize))
+            futures = [executor.submit(_summarize_candidate_task, task) for task in tasks]
+            interval = progress_interval(len(futures))
+            for completed, future in enumerate(as_completed(futures), start=1):
+                candidates.append(future.result())
+                if progress and (completed == len(futures) or completed % interval == 0):
+                    print(
+                        f"[progress] {direction}: summarized {completed}/{len(futures)} candidate bursts",
+                        file=sys.stderr,
+                        flush=True,
+                    )
     else:
-        candidates = [_summarize_candidate_task(task) for task in tasks]
+        candidates = []
+        interval = progress_interval(len(tasks))
+        for completed, task in enumerate(tasks, start=1):
+            candidates.append(_summarize_candidate_task(task))
+            if progress and (completed == len(tasks) or completed % interval == 0):
+                print(
+                    f"[progress] {direction}: summarized {completed}/{len(tasks)} candidate bursts",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
+    if progress:
+        print(f"[progress] {direction}: filtering and assigning burst sequence", file=sys.stderr, flush=True)
     candidates = filter_sequence_candidates(
         candidates,
         expected_bursts=expected_bursts,
@@ -454,12 +587,15 @@ def detect_capture_bursts(
         center_freq_hz=center_freq_hz,
         start_offset_hz=start_offset_hz,
         step_hz=step_hz,
+        assignment_mode=assignment_mode,
     )
     for burst_index, row in enumerate(rows):
         row["burst_index"] = int(burst_index)
         row["amp_threshold"] = float(threshold)
         row["amp_noise_floor"] = float(noise_floor)
         row["amp_signal_level"] = float(signal_level)
+    if progress:
+        print(f"[progress] {direction}: assigned {len(rows)} bursts", file=sys.stderr, flush=True)
     return rows
 
 
@@ -608,6 +744,11 @@ def _partition_repeat_groups(rows: list[dict[str, Any]], repeats: int) -> list[l
     return groups
 
 
+def _partition_repeat_groups_sequential(rows: list[dict[str, Any]], repeats: int) -> list[list[dict[str, Any]]]:
+    group_size = max(1, int(repeats))
+    return [rows[idx : idx + group_size] for idx in range(0, len(rows), group_size)]
+
+
 def assign_freq_groups(
     candidates: list[dict[str, Any]],
     *,
@@ -616,20 +757,25 @@ def assign_freq_groups(
     center_freq_hz: float,
     start_offset_hz: float,
     step_hz: float,
+    assignment_mode: str = "sequential",
 ) -> list[dict[str, Any]]:
-    rows = [dict(row) for row in candidates]
+    rows = sorted((dict(row) for row in candidates), key=lambda item: int(item["segment_start"]))
     for row in rows:
         row["assigned_to_freq"] = False
         row["freq_index"] = -1
         row["repeat_index"] = -1
         row["freq_hz"] = None
         row["slot_kind"] = "unassigned"
+        row["assignment_mode"] = assignment_mode
 
     if expected_freq_count <= 0 or not rows:
         return rows
 
     if repeats > 1:
-        groups = _partition_repeat_groups(rows, repeats)
+        if assignment_mode == "cluster":
+            groups = _partition_repeat_groups(rows, repeats)
+        else:
+            groups = _partition_repeat_groups_sequential(rows, repeats)
         for freq_index, group_rows in enumerate(groups):
             for repeat_index, row in enumerate(group_rows):
                 if freq_index >= expected_freq_count:
@@ -665,13 +811,7 @@ def assign_freq_groups(
 
 
 def average_rows_by_freq(rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
-    grouped: dict[int, list[dict[str, Any]]] = {}
-    for row in rows:
-        if not bool(row.get("sequence_ok", True)):
-            continue
-        if not bool(row.get("assigned_to_freq", False)):
-            continue
-        grouped.setdefault(int(row["freq_index"]), []).append(row)
+    grouped = group_valid_rows_by_freq(rows)
 
     averaged: dict[int, dict[str, Any]] = {}
     for freq_index, freq_rows in grouped.items():
@@ -691,6 +831,19 @@ def average_rows_by_freq(rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]
             "phase": float(np.angle(z_bar)),
         }
     return averaged
+
+
+def group_valid_rows_by_freq(rows: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for row in rows:
+        if not bool(row.get("sequence_ok", True)):
+            continue
+        if not bool(row.get("assigned_to_freq", False)):
+            continue
+        grouped.setdefault(int(row["freq_index"]), []).append(row)
+    for freq_rows in grouped.values():
+        freq_rows.sort(key=lambda item: int(item.get("repeat_index", 0)))
+    return grouped
 
 
 def summarize_quality_flags(flags: list[str]) -> str:
@@ -876,10 +1029,15 @@ def plot_burst_samples(
     segment = capture[start:stop]
     if segment.size == 0:
         return
+    plot_segment = segment
+    if bool(row.get("cfo_compensated", False)):
+        slope = float(row.get("cfo_slope_rad_per_sample", 0.0))
+        n = np.arange(segment.size, dtype=np.float64)
+        plot_segment = segment * np.exp(-1j * slope * n)
 
-    xs = np.arange(segment.size, dtype=int)
-    amp = np.abs(segment)
-    angle_unwrapped = np.unwrap(np.angle(segment))
+    xs = np.arange(plot_segment.size, dtype=int)
+    amp = np.abs(plot_segment)
+    angle_unwrapped = np.unwrap(np.angle(plot_segment))
 
     fig, axes = plt.subplots(3, 1, figsize=(10, 9))
 
@@ -894,7 +1052,9 @@ def plot_burst_samples(
             f"len={row['segment_len']} "
             f"ok={bool(row.get('sequence_ok', True))} "
             f"assigned={bool(row.get('assigned_to_freq', False))} "
-            f"flags={','.join(row.get('quality_flags', [])) or 'none'}"
+            f"flags={','.join(row.get('quality_flags', [])) or 'none'} "
+            f"cfo={'on' if bool(row.get('cfo_compensated', False)) else 'off'}"
+            f"({float(row.get('cfo_hz', 0.0)):.3f} Hz)"
         )
     )
 
@@ -904,14 +1064,14 @@ def plot_burst_samples(
     _set_robust_ylim(axes[1], angle_unwrapped, min_span=0.25)
     axes[1].grid(True, alpha=0.3)
 
-    axes[2].plot(segment.real, segment.imag, ".", markersize=1.2, alpha=0.7, color="tab:purple")
+    axes[2].plot(plot_segment.real, plot_segment.imag, ".", markersize=1.2, alpha=0.7, color="tab:purple")
     axes[2].set_xlabel("I")
     axes[2].set_ylabel("Q")
     axes[2].set_aspect("equal", adjustable="box")
-    i_center = float(np.median(segment.real))
-    q_center = float(np.median(segment.imag))
-    i_low, i_high = np.percentile(segment.real, [1.0, 99.0])
-    q_low, q_high = np.percentile(segment.imag, [1.0, 99.0])
+    i_center = float(np.median(plot_segment.real))
+    q_center = float(np.median(plot_segment.imag))
+    i_low, i_high = np.percentile(plot_segment.real, [1.0, 99.0])
+    q_low, q_high = np.percentile(plot_segment.imag, [1.0, 99.0])
     iq_span = max(float(i_high - i_low), float(q_high - q_low), 0.08)
     iq_half_span = 0.5 * iq_span * 1.2
     axes[2].set_xlim(i_center - iq_half_span, i_center + iq_half_span)
@@ -942,7 +1102,9 @@ def plot_pair_phase_by_freq(
 ) -> list[dict[str, Any]]:
     reflector_avg = average_rows_by_freq(reflector_rows)
     initiator_avg = average_rows_by_freq(initiator_rows)
-    common_freq_indices = sorted(set(reflector_avg) & set(initiator_avg))
+    reflector_by_freq = group_valid_rows_by_freq(reflector_rows)
+    initiator_by_freq = group_valid_rows_by_freq(initiator_rows)
+    common_freq_indices = sorted(set(reflector_by_freq) & set(initiator_by_freq))
     if not common_freq_indices:
         return []
 
@@ -952,7 +1114,22 @@ def plot_pair_phase_by_freq(
     rows: list[dict[str, Any]] = []
 
     for freq_index in common_freq_indices:
-        z_pair = initiator_avg[freq_index]["z"] * reflector_avg[freq_index]["z"]
+        initiator_by_repeat = {int(row.get("repeat_index", 0)): row for row in initiator_by_freq[freq_index]}
+        reflector_by_repeat = {int(row.get("repeat_index", 0)): row for row in reflector_by_freq[freq_index]}
+        common_repeats = sorted(set(initiator_by_repeat) & set(reflector_by_repeat))
+        if not common_repeats:
+            continue
+        pair_values = []
+        for repeat_index in common_repeats:
+            initiator_row = initiator_by_repeat[repeat_index]
+            reflector_row = reflector_by_repeat[repeat_index]
+            z_initiator = complex(float(initiator_row["robust_mean_i"]), float(initiator_row["robust_mean_q"]))
+            z_reflector = complex(float(reflector_row["robust_mean_i"]), float(reflector_row["robust_mean_q"]))
+            pair_values.append(z_initiator * z_reflector)
+        pair_array = np.array(pair_values, dtype=np.complex128)
+        z_pair = complex(np.mean(pair_array))
+        pair_repeat_phases = [float(np.angle(value)) for value in pair_values]
+        pair_repeat_phase_spread = circular_phase_spread_rad(pair_repeat_phases) if len(pair_repeat_phases) > 1 else 0.0
         freq_hz = float(initiator_avg[freq_index]["freq_hz"])
         freq_mhz.append(freq_hz / 1e6)
         pair_phase.append(float(np.angle(z_pair)))
@@ -963,6 +1140,8 @@ def plot_pair_phase_by_freq(
                 "freq_hz": freq_hz,
                 "pair_abs": float(abs(z_pair)),
                 "pair_phase_rad": float(np.angle(z_pair)),
+                "pair_repeat_count": int(len(common_repeats)),
+                "pair_repeat_phase_spread_rad": float(pair_repeat_phase_spread),
                 "initiator_abs": float(initiator_avg[freq_index]["abs"]),
                 "initiator_phase_rad": float(initiator_avg[freq_index]["phase"]),
                 "reflector_abs": float(reflector_avg[freq_index]["abs"]),
@@ -1002,6 +1181,8 @@ def save_pair_phase_csv(rows: list[dict[str, Any]], save_path: Path) -> None:
                     "pair_abs": float(row["pair_abs"]),
                     "pair_angle_rad": float(row["pair_phase_rad"]),
                     "pair_phase_rad": float(row["pair_phase_rad"]),
+                    "pair_repeat_count": int(row.get("pair_repeat_count", 0)),
+                    "pair_repeat_phase_spread_rad": float(row.get("pair_repeat_phase_spread_rad", 0.0)),
                     "initiator_abs": float(row["initiator_abs"]),
                     "initiator_angle_rad": float(row["initiator_phase_rad"]),
                     "reflector_abs": float(row["reflector_abs"]),
@@ -1066,6 +1247,7 @@ def build_summary(direction: str, path: Path, rows: list[dict[str, Any]], raw_sa
         mean_abs = [float(row["segment_mean_abs"]) for row in rows]
         coherence = [float(row["segment_coherence"]) for row in rows]
         phase_std = [float(row["segment_phase_std"]) for row in rows]
+        cfo_values = [float(row.get("cfo_hz", 0.0)) for row in rows if bool(row.get("cfo_compensated", False))]
         trimmed = [1.0 for row in rows if int(row["core_offset_start"]) > 0]
         invalid = [1.0 for row in rows if not bool(row.get("sequence_ok", True))]
         assigned = [1.0 for row in rows if bool(row.get("assigned_to_freq", False))]
@@ -1073,6 +1255,7 @@ def build_summary(direction: str, path: Path, rows: list[dict[str, Any]], raw_sa
         mean_abs = []
         coherence = []
         phase_std = []
+        cfo_values = []
         trimmed = []
         invalid = []
         assigned = []
@@ -1086,6 +1269,8 @@ def build_summary(direction: str, path: Path, rows: list[dict[str, Any]], raw_sa
         "mean_segment_abs": float(np.mean(mean_abs)) if mean_abs else 0.0,
         "mean_segment_coherence": float(np.mean(coherence)) if coherence else 0.0,
         "mean_segment_phase_std": float(np.mean(phase_std)) if phase_std else 0.0,
+        "mean_cfo_hz": float(np.mean(cfo_values)) if cfo_values else 0.0,
+        "std_cfo_hz": float(np.std(cfo_values)) if cfo_values else 0.0,
         "trimmed_burst_count": int(len(trimmed)),
         "invalid_burst_count": int(len(invalid)),
         "assigned_burst_count": int(len(assigned)),
@@ -1097,7 +1282,12 @@ def analyze_one_capture(
     path: Path,
     args: argparse.Namespace,
 ) -> dict[str, Any]:
+    progress_log(f"{direction}: loading {path}", args)
     capture = load_gr_complex_bin(path)
+    progress_log(
+        f"{direction}: loaded {capture.size} complex64 samples ({path.stat().st_size / (1024 ** 3):.2f} GiB)",
+        args,
+    )
     expected_bursts = expected_burst_count(
         args.start_offset_hz,
         args.stop_offset_hz,
@@ -1106,6 +1296,7 @@ def analyze_one_capture(
     )
     rows = detect_capture_bursts(
         capture,
+        direction=direction,
         repeats=args.repeats,
         start_offset_hz=args.start_offset_hz,
         step_hz=args.step_hz,
@@ -1117,8 +1308,13 @@ def analyze_one_capture(
         expected_bursts=expected_bursts,
         edge_trim_samples=args.edge_trim_samples,
         jobs=args.jobs,
+        progress=progress_enabled(args),
+        cfo_compensate=args.cfo_compensate,
+        sample_rate=args.sample_rate,
+        assignment_mode=args.assignment_mode,
     )
 
+    progress_log(f"{direction}: building summary", args)
     result = {
         "summary": build_summary(direction, path, rows, raw_samples=int(capture.size), expected_bursts=expected_bursts),
         "rows": rows,
@@ -1126,6 +1322,7 @@ def analyze_one_capture(
 
     if args.save_plot_dir is not None:
         save_path = args.save_plot_dir.resolve() / f"{direction}_capture_summary.png"
+        progress_log(f"{direction}: saving capture summary plot", args)
         plot_capture(rows, save_path, f"{direction} continuous capture summary")
         result["plot_path"] = str(save_path)
         if not args.no_burst_plots:
@@ -1141,16 +1338,25 @@ def analyze_one_capture(
                 stop = int(row["segment_stop"])
                 plot_tasks.append((capture[start:stop], row, str(burst_plot_dir / burst_name), direction))
             worker_count = max(1, int(args.jobs))
+            progress_log(f"{direction}: saving {len(plot_tasks)} burst plots", args)
             if worker_count > 1 and len(plot_tasks) > 1:
                 worker_count = min(worker_count, len(plot_tasks))
-                chunksize = max(1, len(plot_tasks) // (worker_count * 4))
                 with ProcessPoolExecutor(max_workers=worker_count) as executor:
-                    list(executor.map(_plot_burst_samples_task, plot_tasks, chunksize=chunksize))
+                    futures = [executor.submit(_plot_burst_samples_task, task) for task in plot_tasks]
+                    interval = progress_interval(len(futures))
+                    for completed, future in enumerate(as_completed(futures), start=1):
+                        future.result()
+                        if progress_enabled(args) and (completed == len(futures) or completed % interval == 0):
+                            progress_log(f"{direction}: saved {completed}/{len(futures)} burst plots", args)
             else:
-                for task in plot_tasks:
+                interval = progress_interval(len(plot_tasks))
+                for completed, task in enumerate(plot_tasks, start=1):
                     _plot_burst_samples_task(task)
+                    if progress_enabled(args) and (completed == len(plot_tasks) or completed % interval == 0):
+                        progress_log(f"{direction}: saved {completed}/{len(plot_tasks)} burst plots", args)
             result["burst_plot_dir"] = str(burst_plot_dir)
 
+    progress_log(f"{direction}: done", args)
     return result
 
 
@@ -1171,13 +1377,26 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gap-tolerance", type=int, default=48)
     parser.add_argument("--min-segment-len", type=int, default=64)
     parser.add_argument("--edge-trim-samples", type=int, default=16, help="在稳定 core 基础上额外丢弃每个 burst 头尾各 N 个样本")
+    parser.add_argument(
+        "--assignment-mode",
+        choices=("sequential", "cluster"),
+        default="sequential",
+        help="burst 到频点/repeat 的归属方式；sequential 按时间顺序每 repeats 个一组，cluster 使用旧的相位/幅度聚类",
+    )
+    parser.add_argument(
+        "--cfo-compensate",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="对每个 burst 单独估计一阶 CFO 并只去掉相位斜率，保留平均相位",
+    )
     parser.add_argument("--jobs", type=int, default=0, help="并行分析 worker 数；0 表示自动使用 CPU 核数")
     parser.add_argument("--no-burst-plots", action="store_true", help="不保存每个 burst 的单独 PNG，只保存总览图和 CSV/JSON")
+    parser.add_argument("--no-progress", action="store_true", help="关闭进度日志")
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot-dir", type=Path, default=None)
     parser.add_argument("--save-pair-csv", type=Path, default=None)
     parser.add_argument("--save-pair-angle-csv", type=Path, default=None)
-    parser.add_argument("--capture-group", default="all", help="要分析的采集组 label；默认 all。配置文件里当前默认有 2m 和 4m")
+    parser.add_argument("--capture-group", default="all", help="要分析的采集组 label；默认 all。组名从配置文件 capture_groups 读取")
     parser.add_argument("--no-distance-estimates", action="store_true", help="只做 burst 分析，不生成两种距离估计结果")
     parser.add_argument("--distance-min-m", type=float, default=0.0, help="兼容旧配置；当前 phase-match 改为围绕斜率距离局部搜索")
     parser.add_argument("--distance-max-m", type=float, default=20.0, help="兼容旧配置；当前 phase-match 改为围绕斜率距离局部搜索")
@@ -1185,6 +1404,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--match-window-m", type=float, default=10.0, help="phase-match 围绕线性斜率距离的搜索半窗口")
     parser.add_argument("--propagation-speed-mps", type=float, default=2.3e8, help="传播速度，默认 2.3e8 m/s（铜质有线测量）")
     parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.2, help="线性拟合 unwrap 时允许相邻频点小幅上升的容差")
+    parser.add_argument("--calibration-reference-m", type=float, default=None, help="校对组真实距离；存在 calibration/measurement 两组时，最终输出 measurement - calibration + reference")
     return parser
 
 
@@ -1213,6 +1433,7 @@ def add_distance_estimates(
     estimates: dict[str, Any] = {}
 
     try:
+        progress_log("distance: running linear fit estimator", args)
         linear_result = estimate_distance_from_pair_rows(pair_phase_rows, estimate_args, source="analyze")
         linear_plot_path = plot_dir / "distance_linear_fit.png"
         save_estimate_plot(linear_result, linear_plot_path)
@@ -1237,6 +1458,7 @@ def add_distance_estimates(
         print(f"linear_distance_error: {exc}")
 
     try:
+        progress_log("distance: running phase-match estimator", args)
         phase_match_result = estimate_distance_phase_match_from_pair_rows(pair_phase_rows, estimate_args, source="analyze")
         phase_match_plot_path = plot_dir / "distance_phase_match.png"
         save_phase_match_plot(phase_match_result, phase_match_plot_path)
@@ -1285,6 +1507,99 @@ def print_distance_summary(result: dict[str, Any], *, disabled: bool) -> None:
         print(f"distance_phase_match_m: error ({phase_match.get('error', 'unknown')})")
 
 
+def _distance_value_for_summary(estimates: dict[str, Any], key: str) -> str:
+    value = estimates.get(key)
+    if not isinstance(value, dict):
+        return "unavailable"
+    if "distance_m" in value:
+        return f"{float(value['distance_m']):.6f} m"
+    return f"error ({value.get('error', 'unknown')})"
+
+
+def _distance_float_for_summary(result: dict[str, Any], key: str) -> float | None:
+    estimates = result.get("distance_estimates")
+    if not isinstance(estimates, dict):
+        return None
+    value = estimates.get(key)
+    if not isinstance(value, dict) or "distance_m" not in value:
+        return None
+    return float(value["distance_m"])
+
+
+def print_calibrated_measurement_summary(
+    results: list[dict[str, Any]],
+    *,
+    disabled: bool,
+    calibration_reference_m: float,
+    calibration_label: str = "calibration",
+    measurement_label: str = "measurement",
+) -> None:
+    print("calibrated_measurement_summary:")
+    if disabled:
+        print("  disabled_by_no_distance_estimates")
+        return
+
+    by_label = {str(result.get("capture_group")): result for result in results}
+    calibration = by_label.get(calibration_label)
+    measurement = by_label.get(measurement_label)
+    if calibration is None or measurement is None:
+        print(f"  unavailable: need groups {calibration_label!r} and {measurement_label!r}")
+        return
+
+    print(f"  calibration_reference_m: {float(calibration_reference_m):.6f}")
+    for key in ("linear_fit", "phase_match"):
+        calibration_distance = _distance_float_for_summary(calibration, key)
+        measurement_distance = _distance_float_for_summary(measurement, key)
+        if calibration_distance is None or measurement_distance is None:
+            print(f"  {key}: unavailable")
+            continue
+        calibrated = measurement_distance - calibration_distance + float(calibration_reference_m)
+        print(
+            f"  {key}: measurement_raw={measurement_distance:.6f} m, "
+            f"calibration_raw={calibration_distance:.6f} m, "
+            f"calibrated_measurement={calibrated:.6f} m"
+        )
+
+
+def print_all_distance_summary(
+    results: list[dict[str, Any]],
+    *,
+    disabled: bool,
+    calibration_reference_m: float | None = None,
+) -> None:
+    """Print a compact final table after all capture groups finish."""
+    print("all_distance_summary:")
+    if disabled:
+        print("  disabled_by_no_distance_estimates")
+        return
+    if not results:
+        print("  unavailable")
+        return
+
+    for result in results:
+        capture_group = result.get("capture_group", "unknown")
+        capture_distance_m = result.get("capture_distance_m")
+        estimates = result.get("distance_estimates")
+        if not isinstance(estimates, dict):
+            print(f"  {capture_group}: unavailable")
+            continue
+
+        expected = "unknown" if capture_distance_m is None else f"{float(capture_distance_m):.6f} m"
+        linear = _distance_value_for_summary(estimates, "linear_fit")
+        phase_match = _distance_value_for_summary(estimates, "phase_match")
+        print(
+            f"  {capture_group}: expected={expected}, "
+            f"linear_fit={linear}, phase_match={phase_match}"
+        )
+
+    if calibration_reference_m is not None:
+        print_calibrated_measurement_summary(
+            results,
+            disabled=disabled,
+            calibration_reference_m=float(calibration_reference_m),
+        )
+
+
 def run_capture_analysis(
     *,
     args: argparse.Namespace,
@@ -1298,6 +1613,7 @@ def run_capture_analysis(
     save_pair_angle_csv_path: Path | None,
     save_json: Path | None,
 ) -> dict[str, Any]:
+    progress_log(f"group {capture_group}: starting analysis", args)
     expected_bursts = expected_burst_count(
         args.start_offset_hz,
         args.stop_offset_hz,
@@ -1332,15 +1648,19 @@ def run_capture_analysis(
             "gap_tolerance": int(args.gap_tolerance),
             "min_segment_len": int(args.min_segment_len),
             "edge_trim_samples": int(args.edge_trim_samples),
+            "assignment_mode": str(args.assignment_mode),
+            "cfo_compensate": bool(args.cfo_compensate),
             "jobs": int(args.jobs),
             "no_burst_plots": bool(args.no_burst_plots),
         },
         "expected_burst_count": int(expected_bursts),
-        "reflector": analyze_one_capture("reflector", reflector_file, run_args),
-        "initiator": analyze_one_capture("initiator", initiator_file, run_args),
     }
+    progress_log(f"group {capture_group}: expected {expected_bursts} bursts per side", args)
+    result["reflector"] = analyze_one_capture("reflector", reflector_file, run_args)
+    result["initiator"] = analyze_one_capture("initiator", initiator_file, run_args)
 
     pair_phase_plot_path = run_args.save_plot_dir.resolve() / "pair_phase_by_freq.png"
+    progress_log(f"group {capture_group}: pairing phases by frequency", args)
     pair_phase_rows = plot_pair_phase_by_freq(
         result["reflector"]["rows"],
         result["initiator"]["rows"],
@@ -1358,6 +1678,7 @@ def run_capture_analysis(
     )
     save_pair_phase_csv(pair_phase_rows, pair_phase_csv_path)
     save_pair_angle_csv(pair_phase_rows, pair_angle_csv_path)
+    progress_log(f"group {capture_group}: building frequency diagnostics", args)
     expected_freq_count = int(round(float(expected_bursts) / float(args.repeats))) if args.repeats > 0 else 0
     initiator_diag = build_side_freq_diagnostics(
         result["initiator"]["rows"],
@@ -1417,24 +1738,36 @@ def run_capture_analysis(
 
     if run_args.save_json is not None:
         out_path = run_args.save_json.resolve()
+        progress_log(f"group {capture_group}: writing JSON {out_path}", args)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"saved_json: {out_path}")
 
+    progress_log(f"group {capture_group}: done", args)
     return result
 
 
 def main() -> None:
     parser = build_argument_parser()
     config_args, _ = parser.parse_known_args()
-    config = load_config(config_args.config)
+    raw_config = load_config(config_args.config)
+    config, config_profile = select_config_for_root(
+        raw_config,
+        config_args.root,
+        root_was_provided=_cli_root_was_provided(),
+    )
     apply_config_defaults(parser, config)
     args = parser.parse_args()
     args.config = config_args.config
     args.loaded_config = str((args.config if args.config.is_absolute() else (PROJECT_ROOT / args.config)).resolve()) if args.config is not None else None
+    args.loaded_config_profile = config_profile
     if int(args.jobs) <= 0:
         args.jobs = max(1, os.cpu_count() or 1)
     root = resolve_root(args.root)
+    if config_profile is not None:
+        progress_log(f"config_profile: {config_profile}", args)
+    progress_log(f"root: {root}", args)
+    progress_log(f"jobs: {args.jobs}", args)
 
     base_plot_dir = args.save_plot_dir.resolve() if args.save_plot_dir is not None else default_plot_dir(root)
     explicit_files = args.reflector_file is not None or args.initiator_file is not None
@@ -1482,7 +1815,8 @@ def main() -> None:
             )
 
     all_results: list[dict[str, Any]] = []
-    for spec in run_specs:
+    for spec_index, spec in enumerate(run_specs, start=1):
+        progress_log(f"run {spec_index}/{len(run_specs)}: capture_group={spec['label']}", args)
         all_results.append(
             run_capture_analysis(
                 args=args,
@@ -1500,9 +1834,16 @@ def main() -> None:
 
     if not explicit_files and args.save_json is not None and len(run_specs) > 1:
         out_path = args.save_json.resolve()
+        progress_log(f"writing combined JSON {out_path}", args)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps({"root": str(root), "results": all_results}, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"saved_json: {out_path}")
+
+    print_all_distance_summary(
+        all_results,
+        disabled=bool(args.no_distance_estimates),
+        calibration_reference_m=args.calibration_reference_m,
+    )
 
 
 if __name__ == "__main__":

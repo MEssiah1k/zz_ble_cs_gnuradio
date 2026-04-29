@@ -4,7 +4,7 @@ category: '[usrp_ble]'
 
 templates:
   imports: from gnuradio import usrp_ble
-  make: usrp_ble.data_store(${data_len}, ${skip_len}, ${path})
+  make: usrp_ble.data_store(${data_len}, ${skip_len}, ${path}, ${capture_group_filter})
 
 #  Make one 'parameters' list entry for every parameter you want settable from the GUI.
 #     Keys include:
@@ -25,6 +25,10 @@ parameters:
   label: Save Path
   dtype: string
   default: /tmp
+- id: capture_group_filter
+  label: Capture Group Filter
+  dtype: int
+  default: '-1'
 
 inputs:
 - label: in

@@ -125,7 +125,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: "\u8F93\u51FA gr_complex / complex64 \u539F\u59CB IQ"
-    file: /home/mess1ah/zz_ble_cs_gnuradio/usrp_ble_scope/ble_cs_single_freq_long.c64
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/usrp_ble_scope/ble_cs_single_freq_long.c64
     type: complex
     unbuffered: 'False'
     vlen: '1'

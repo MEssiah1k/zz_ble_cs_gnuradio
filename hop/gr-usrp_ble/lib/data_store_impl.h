@@ -51,6 +51,8 @@ namespace gr {
       std::string _path;             // 数据目录路径，生成的 .bin 文件会保存在这个目录下
       int _freq_index;               // 当前文件所属的频点编号，由 interact_center 通过消息下发
       int _repeat_index;             // 当前文件所属的重复编号，由 interact_center 通过消息下发
+      int _capture_group_index;       // 当前文件所属的采集组编号，由 interact_center 通过消息下发
+      int _capture_group_filter;      // 只响应指定采集组；-1 表示不过滤
       bool _is_saving;               // 当前是否处于写盘状态，false 时只消费输入不写文件
       bool _is_skipping;             // 当前是否仍处于前导过渡带跳过阶段
       int _skipped_samples_count;    // 当前这一个文件中已经跳过了多少个前导样本
@@ -100,7 +102,7 @@ namespace gr {
       void stop_saving();
 
      public:
-      data_store_impl(int data_len, int skip_len, const std::string& path);
+      data_store_impl(int data_len, int skip_len, const std::string& path, int capture_group_filter = -1);
       ~data_store_impl();
 
       /*

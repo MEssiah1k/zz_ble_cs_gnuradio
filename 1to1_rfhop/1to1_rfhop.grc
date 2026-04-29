@@ -223,7 +223,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator2
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator2
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -241,7 +241,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector2
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector2
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -2109,7 +2109,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '2000'
-    path: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1_rfhop/data_reflector_rx_from_initiator
     skip_len: '2500'
   states:
     bus_sink: false
@@ -2125,7 +2125,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '2000'
-    path: /home/ubuntu/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1_rfhop/data_initiator_rx_from_reflector
     skip_len: '2500'
   states:
     bus_sink: false

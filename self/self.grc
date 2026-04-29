@@ -156,7 +156,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: Continuous reflector-side capture.
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator2
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator2
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -174,7 +174,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: Continuous initiator-side capture.
-    file: /home/ubuntu/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector2
+    file: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector2
     type: complex
     unbuffered: 'False'
     vlen: '1'
@@ -521,7 +521,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/ubuntu/zz_ble_cs_gnuradio/self/data_initiator_rx_from_reflector
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/self/data_initiator_rx_from_reflector
     skip_len: '50000'
   states:
     bus_sink: false
@@ -537,7 +537,7 @@ blocks:
     alias: ''
     comment: ''
     data_len: '200'
-    path: /home/ubuntu/zz_ble_cs_gnuradio/self/data_reflector_rx_from_initiator
+    path: /home/lfy/workarea/zz_ble_cs_gnuradio/self/data_reflector_rx_from_initiator
     skip_len: '35000'
   states:
     bus_sink: false

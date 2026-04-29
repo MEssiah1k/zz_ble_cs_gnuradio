@@ -41,6 +41,7 @@ void bind_data_store(py::module& m)
            py::arg("data_len"),
            py::arg("skip_len"),
            py::arg("path"),
+           py::arg("capture_group_filter") = -1,
            D(data_store,make)
         )
         
@@ -53,7 +54,6 @@ void bind_data_store(py::module& m)
 
 
 }
-
 
 
 
