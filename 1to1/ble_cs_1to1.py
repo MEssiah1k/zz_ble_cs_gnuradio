@@ -85,8 +85,8 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.start_freq_index = start_freq_index = -40
         self.start_button = start_button = 0
         self.send_gain = send_gain = 0
-        self.samp_rate = samp_rate = 9.5e6
-        self.repeat_total = repeat_total = 2
+        self.samp_rate = samp_rate = 10e6
+        self.repeat_total = repeat_total = 1
         self.recv_gain = recv_gain = 0
         self.centetr_fre = centetr_fre = 2.44e9
 
@@ -111,6 +111,8 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self._recv_gain_range = Range(0, 20, 1, 0, 200)
         self._recv_gain_win = RangeWidget(self._recv_gain_range, self.set_recv_gain, "'recv_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._recv_gain_win)
+        self.usrp_ble_random_phase_1 = usrp_ble.random_phase(2, 1.0)
+        self.usrp_ble_random_phase_0 = usrp_ble.random_phase(1, 1.0)
         self.usrp_ble_interact_center_0 = usrp_ble.interact_center(int(samp_rate), start_button, stop_button, wait_time_ms, repeat_total, start_freq_index, stop_freq_index, step_hz, 2)
         self.usrp_ble_interact_center_0.set_use_msg_clock(False)
         self.usrp_ble_data_send_0_0 = usrp_ble.data_send(samp_rate, 0.001)
@@ -191,10 +193,10 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.msg_connect((self.usrp_ble_interact_center_0, 'capture_ctrl'), (self.usrp_ble_capture_gate_1_0, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send1_ctrl'), (self.usrp_ble_data_send_0, 'command'))
         self.msg_connect((self.usrp_ble_interact_center_0, 'send2_ctrl'), (self.usrp_ble_data_send_0_0, 'command'))
-        self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_conjugate_cc_0, 1))
-        self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_conjugate_cc_0_0, 1))
-        self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0, 0))
-        self.connect((self.analog_sig_source_x_0_1, 0), (self.blocks_multiply_xx_0_0, 0))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_random_phase_0, 'freq'))
+        self.msg_connect((self.usrp_ble_interact_center_0, 'freq_ctrl'), (self.usrp_ble_random_phase_1, 'freq'))
+        self.connect((self.analog_sig_source_x_0_1, 0), (self.usrp_ble_random_phase_0, 0))
+        self.connect((self.analog_sig_source_x_0_1, 0), (self.usrp_ble_random_phase_1, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_0, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0, 0), (self.usrp_ble_capture_gate_1, 0))
         self.connect((self.blocks_multiply_conjugate_cc_0_0, 0), (self.usrp_ble_capture_gate_0_0, 0))
@@ -210,6 +212,10 @@ class ble_cs_1to1(gr.top_block, Qt.QWidget):
         self.connect((self.usrp_ble_data_send_0, 0), (self.blocks_multiply_xx_0, 1))
         self.connect((self.usrp_ble_data_send_0, 0), (self.usrp_ble_interact_center_0, 0))
         self.connect((self.usrp_ble_data_send_0_0, 0), (self.blocks_multiply_xx_0_0, 1))
+        self.connect((self.usrp_ble_random_phase_0, 0), (self.blocks_multiply_conjugate_cc_0_0, 1))
+        self.connect((self.usrp_ble_random_phase_0, 0), (self.blocks_multiply_xx_0, 0))
+        self.connect((self.usrp_ble_random_phase_1, 0), (self.blocks_multiply_conjugate_cc_0, 1))
+        self.connect((self.usrp_ble_random_phase_1, 0), (self.blocks_multiply_xx_0_0, 0))
 
 
     def closeEvent(self, event):

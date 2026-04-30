@@ -30,6 +30,6 @@
   "distance_step_m": 0.01,
   "match_window_m": 10.0,
   "propagation_speed_mps": 230000000.0,
-  "unwrap_upward_tolerance_rad": 0.2,
+  "unwrap_upward_tolerance_rad": 0.8,
   "no_distance_estimates": false
 }

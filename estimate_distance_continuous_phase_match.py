@@ -43,7 +43,7 @@ def wrap_to_pi(x: np.ndarray | float) -> np.ndarray | float:
 def unwrap_with_negative_slope_prior(
     phases_wrapped: np.ndarray,
     *,
-    upward_tolerance_rad: float = 0.2,
+    upward_tolerance_rad: float = 0.8,
 ) -> np.ndarray:
     phases = np.asarray(phases_wrapped, dtype=float)
     if phases.size <= 1:
@@ -54,7 +54,7 @@ def unwrap_with_negative_slope_prior(
     for idx in range(1, phases.size):
         value = float(phases[idx])
         prev = float(unwrapped[idx - 1])
-        while value > prev + float(upward_tolerance_rad):
+        while (value - prev) > float(upward_tolerance_rad) and (value - prev) > np.pi:
             value -= TWO_PI
         unwrapped[idx] = value
     return unwrapped
@@ -130,7 +130,7 @@ def estimate_distance_phase_match_from_pair_rows(
     match_window_m = float(getattr(args, "match_window_m", 10.0))
     if match_window_m < 0.0:
         raise SystemExit("match_window_m 不能为负数")
-    unwrap_upward_tolerance_rad = float(getattr(args, "unwrap_upward_tolerance_rad", 0.2))
+    unwrap_upward_tolerance_rad = float(getattr(args, "unwrap_upward_tolerance_rad", 0.8))
     propagation_speed_mps = float(getattr(args, "propagation_speed_mps", DEFAULT_PROPAGATION_SPEED_MPS))
     slope_distance_m, slope_rad_per_hz, slope_intercept_rad, measured_unwrapped = slope_distance_from_wrapped_phase(
         freqs_hz,
@@ -267,7 +267,7 @@ def estimate_distance_phase_match(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def save_phase_match_plot(result: dict[str, Any], save_path: Path) -> None:
-    rows = result["rows"]
+    rows = result.get("plot_rows", result["rows"])
     if not rows:
         return
 
@@ -275,6 +275,7 @@ def save_phase_match_plot(result: dict[str, Any], save_path: Path) -> None:
     measured = np.array([float(row["phase_wrapped_measured"]) for row in rows], dtype=float)
     fitted = np.array([float(row["phase_wrapped_fit"]) for row in rows], dtype=float)
     error = np.array([float(row["phase_wrapped_error"]) for row in rows], dtype=float)
+    used_for_fit = np.array([bool(row.get("used_for_fit", True)) for row in rows], dtype=bool)
     fitted_unwrapped = np.unwrap(fitted)
     measured_unwrapped = fitted_unwrapped + error
     distance_grid = np.array(result["distance_grid_m"], dtype=float)
@@ -288,14 +289,35 @@ def save_phase_match_plot(result: dict[str, Any], save_path: Path) -> None:
     axes[0].set_title("Wrapped phase distance matching cost")
     axes[0].grid(True, alpha=0.3)
 
-    axes[1].plot(freq_mhz, measured_unwrapped, "o-", linewidth=1.2, markersize=4, label="measured")
-    axes[1].plot(freq_mhz, fitted_unwrapped, "o-", linewidth=1.2, markersize=4, label="model fit")
+    axes[1].plot(freq_mhz[used_for_fit], measured_unwrapped[used_for_fit], "o-", linewidth=1.2, markersize=4, label="measured (used)")
+    if np.any(~used_for_fit):
+        axes[1].plot(
+            freq_mhz[~used_for_fit],
+            measured_unwrapped[~used_for_fit],
+            "o-",
+            linewidth=1.2,
+            markersize=4,
+            label="measured (excluded)",
+            color="tab:gray",
+            alpha=0.9,
+        )
+    axes[1].plot(freq_mhz[used_for_fit], fitted_unwrapped[used_for_fit], "o-", linewidth=1.2, markersize=4, label="model fit")
     axes[1].set_ylabel("Unwrapped Phase (rad)")
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
 
     axes[2].axhline(0.0, color="black", linewidth=1.0, alpha=0.6)
-    axes[2].plot(freq_mhz, error, "o-", linewidth=1.2, markersize=4, color="tab:red")
+    axes[2].plot(freq_mhz[used_for_fit], error[used_for_fit], "o-", linewidth=1.2, markersize=4, color="tab:red")
+    if np.any(~used_for_fit):
+        axes[2].plot(
+            freq_mhz[~used_for_fit],
+            error[~used_for_fit],
+            "o-",
+            linewidth=1.2,
+            markersize=4,
+            color="tab:gray",
+            alpha=0.9,
+        )
     axes[2].set_xlabel("Frequency (MHz)")
     axes[2].set_ylabel("Model-aligned Error (rad)")
     axes[2].grid(True, alpha=0.3)
@@ -333,7 +355,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--distance-step-m", type=float, default=0.01)
     parser.add_argument("--match-window-m", type=float, default=10.0, help="围绕线性斜率距离做 phase-match 的半窗口，默认 slope_distance ±10m")
     parser.add_argument("--propagation-speed-mps", type=float, default=DEFAULT_PROPAGATION_SPEED_MPS, help="传播速度，默认 2.3e8 m/s（铜质有线测量）")
-    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.2)
+    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.8)
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot", type=Path, default=None)
     parser.add_argument("--no-save-plot", action="store_true")

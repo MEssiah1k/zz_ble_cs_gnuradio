@@ -70,7 +70,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: '2'
+    value: '1'
   states:
     bus_sink: false
     bus_source: false
@@ -82,7 +82,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: 9.5e6
+    value: 10e6
   states:
     bus_sink: false
     bus_source: false
@@ -348,7 +348,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [560, 736.0]
+    coordinate: [584, 680.0]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0_0
@@ -366,7 +366,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [560, 848.0]
+    coordinate: [552, 824.0]
     rotation: 0
     state: enabled
 - name: qtgui_freq_sink_x_0
@@ -2055,16 +2055,48 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [488, 976.0]
+    coordinate: [376, 1024.0]
     rotation: 0
     state: true
+- name: usrp_ble_random_phase_0
+  id: usrp_ble_random_phase
+  parameters:
+    affinity: ''
+    alias: ''
+    amplitude: '1.0'
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    seed: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [368, 632.0]
+    rotation: 0
+    state: enabled
+- name: usrp_ble_random_phase_1
+  id: usrp_ble_random_phase
+  parameters:
+    affinity: ''
+    alias: ''
+    amplitude: '1.0'
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    seed: '2'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [352, 744.0]
+    rotation: 0
+    state: enabled
 
 connections:
-- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0, '1']
-- [analog_sig_source_x_0_1, '0', blocks_multiply_conjugate_cc_0_0, '1']
-- [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0, '0']
-- [analog_sig_source_x_0_1, '0', blocks_multiply_xx_0_0, '0']
 - [analog_sig_source_x_0_1, '0', qtgui_freq_sink_x_0, '0']
+- [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_0, '0']
+- [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_1, '0']
 - [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_0, '0']
 - [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_1, '0']
 - [blocks_multiply_conjugate_cc_0, '0', usrp_ble_data_store_0, '0']
@@ -2088,10 +2120,16 @@ connections:
 - [usrp_ble_interact_center_0, capture_ctrl, usrp_ble_capture_gate_1_0, command]
 - [usrp_ble_interact_center_0, freq_ctrl, analog_sig_source_x_0_1, cmd]
 - [usrp_ble_interact_center_0, freq_ctrl, blocks_message_debug_0, print]
+- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_random_phase_0, freq]
+- [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_random_phase_1, freq]
 - [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_data_send_0, command]
 - [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_data_send_0_0, command]
 - [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_0, command]
 - [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_0_0, command]
+- [usrp_ble_random_phase_0, '0', blocks_multiply_conjugate_cc_0_0, '1']
+- [usrp_ble_random_phase_0, '0', blocks_multiply_xx_0, '0']
+- [usrp_ble_random_phase_1, '0', blocks_multiply_conjugate_cc_0, '1']
+- [usrp_ble_random_phase_1, '0', blocks_multiply_xx_0_0, '0']
 
 metadata:
   file_format: 1

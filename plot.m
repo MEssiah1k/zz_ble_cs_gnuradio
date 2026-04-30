@@ -2,8 +2,8 @@ clc
 % clear all
 close all
 
-%%root_dir = '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1';
-root_dir = '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1_2sides';
+root_dir = '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1';
+%%root_dir = '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1_2sides';
 
 captures = {
     'Calibration: initiator RX from reflector', ...

@@ -40,7 +40,7 @@ TWO_PI = 2.0 * np.pi
 def unwrap_with_negative_slope_prior(
     phases_wrapped: np.ndarray,
     *,
-    upward_tolerance_rad: float = 0.2,
+    upward_tolerance_rad: float = 0.8,
 ) -> np.ndarray:
     """Unwrap pair phase by enforcing a mostly downward branch.
 
@@ -57,20 +57,25 @@ def unwrap_with_negative_slope_prior(
     for idx in range(1, phases.size):
         value = float(phases[idx])
         prev = float(unwrapped[idx - 1])
-        while value > prev + float(upward_tolerance_rad):
+        # Only treat large upward jumps as 2pi wrapping events.
+        # Small local rises are preserved to avoid artificial segmentation.
+        while (value - prev) > float(upward_tolerance_rad) and (value - prev) > np.pi:
             value -= TWO_PI
         unwrapped[idx] = value
     return unwrapped
 
 
 def save_estimate_plot(result: dict[str, Any], save_path: Path) -> None:
-    rows = result["rows"]
-    freqs_hz = np.array([float(row["freq_hz"]) for row in rows], dtype=float)
-    freq_mhz = freqs_hz / 1e6
-    phase_wrapped = np.array([float(row["phase_wrapped"]) for row in rows], dtype=float)
-    phase_unwrapped = np.array([float(row["phase_unwrapped"]) for row in rows], dtype=float)
-    phase_residual = np.array([float(row["phase_residual"]) for row in rows], dtype=float)
-    fitted = result["slope_rad_per_hz"] * freqs_hz + result["intercept_rad"]
+    fit_rows = result["rows"]
+    plot_rows = result.get("plot_rows", fit_rows)
+    fit_freqs_hz = np.array([float(row["freq_hz"]) for row in fit_rows], dtype=float)
+    plot_freqs_hz = np.array([float(row["freq_hz"]) for row in plot_rows], dtype=float)
+    freq_mhz = plot_freqs_hz / 1e6
+    phase_wrapped = np.array([float(row["phase_wrapped"]) for row in plot_rows], dtype=float)
+    phase_unwrapped = np.array([float(row["phase_unwrapped"]) for row in plot_rows], dtype=float)
+    phase_residual = np.array([float(row["phase_residual"]) for row in plot_rows], dtype=float)
+    used_for_fit = np.array([bool(row.get("used_for_fit", True)) for row in plot_rows], dtype=bool)
+    fit_line_y = result["slope_rad_per_hz"] * fit_freqs_hz + result["intercept_rad"]
 
     fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
     axes[0].plot(freq_mhz, phase_wrapped, "o-", linewidth=1.2, markersize=4)
@@ -78,14 +83,34 @@ def save_estimate_plot(result: dict[str, Any], save_path: Path) -> None:
     axes[0].grid(True, alpha=0.3)
     axes[0].set_title("Pair Phase vs Frequency")
 
-    axes[1].plot(freq_mhz, phase_unwrapped, "o", label="unwrapped", markersize=5)
-    axes[1].plot(freq_mhz, fitted, "-", label="linear fit", linewidth=1.5)
+    axes[1].plot(freq_mhz[used_for_fit], phase_unwrapped[used_for_fit], "o", label="unwrapped (used)", markersize=5)
+    if np.any(~used_for_fit):
+        axes[1].plot(
+            freq_mhz[~used_for_fit],
+            phase_unwrapped[~used_for_fit],
+            "o",
+            label="unwrapped (excluded)",
+            markersize=5,
+            color="tab:gray",
+            alpha=0.9,
+        )
+    axes[1].plot(fit_freqs_hz / 1e6, fit_line_y, "-", label="linear fit (front-only)", linewidth=1.5, color="tab:orange")
     axes[1].set_ylabel("Unwrapped Phase (rad)")
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
 
     axes[2].axhline(0.0, color="black", linewidth=1.0, alpha=0.6)
-    axes[2].plot(freq_mhz, phase_residual, "o-", color="tab:red", linewidth=1.2, markersize=4)
+    axes[2].plot(freq_mhz[used_for_fit], phase_residual[used_for_fit], "o-", color="tab:red", linewidth=1.2, markersize=4)
+    if np.any(~used_for_fit):
+        axes[2].plot(
+            freq_mhz[~used_for_fit],
+            phase_residual[~used_for_fit],
+            "o-",
+            color="tab:gray",
+            linewidth=1.2,
+            markersize=4,
+            alpha=0.9,
+        )
     axes[2].set_xlabel("Frequency (MHz)")
     axes[2].set_ylabel("Residual (rad)")
     axes[2].grid(True, alpha=0.3)
@@ -200,7 +225,7 @@ def estimate_distance_from_pair_rows(
     freqs = np.array(freqs_hz, dtype=float)
     phases_wrapped = np.array(pair_phase_wrapped, dtype=float)
     phases_unwrapped_np = np.unwrap(phases_wrapped)
-    unwrap_upward_tolerance_rad = float(getattr(args, "unwrap_upward_tolerance_rad", 0.2))
+    unwrap_upward_tolerance_rad = float(getattr(args, "unwrap_upward_tolerance_rad", 0.8))
     phases_unwrapped = unwrap_with_negative_slope_prior(
         phases_wrapped,
         upward_tolerance_rad=unwrap_upward_tolerance_rad,
@@ -380,7 +405,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--distance-max-m", type=float, default=20.0)
     parser.add_argument("--distance-step-m", type=float, default=0.01)
     parser.add_argument("--propagation-speed-mps", type=float, default=DEFAULT_PROPAGATION_SPEED_MPS, help="传播速度，默认 2.3e8 m/s（铜质有线测量）")
-    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.2)
+    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.8)
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot", type=Path, default=None)
     parser.add_argument("--no-save-plot", action="store_true")

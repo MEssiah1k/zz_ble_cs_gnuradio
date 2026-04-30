@@ -1184,7 +1184,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--distance-step-m", type=float, default=0.01, help="phase-match 距离搜索步进")
     parser.add_argument("--match-window-m", type=float, default=10.0, help="phase-match 围绕线性斜率距离的搜索半窗口")
     parser.add_argument("--propagation-speed-mps", type=float, default=2.3e8, help="传播速度，默认 2.3e8 m/s（铜质有线测量）")
-    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.2, help="线性拟合 unwrap 时允许相邻频点小幅上升的容差")
+    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.8, help="线性拟合 unwrap 时允许相邻频点小幅上升的容差")
     return parser
 
 
@@ -1194,26 +1194,62 @@ def add_distance_estimates(
     pair_phase_rows: list[dict[str, Any]],
     initiator_rows: list[dict[str, Any]],
     reflector_rows: list[dict[str, Any]],
+    pair_phase_rows_for_plot: list[dict[str, Any]] | None = None,
 ) -> None:
     """Run both distance estimators from already detected pair rows."""
     from estimate_distance_continuous import (
         estimate_distance_from_pair_rows,
         save_estimate_plot,
         save_side_phase_plot,
+        unwrap_with_negative_slope_prior,
     )
     from estimate_distance_continuous_phase_match import (
         estimate_distance_phase_match_from_pair_rows,
         save_phase_match_plot,
+        wrap_to_pi,
     )
 
     estimate_args = argparse.Namespace(**vars(args))
     estimate_args.pair_csv = None
     plot_dir = args.save_plot_dir.resolve()
+    plot_pair_rows = pair_phase_rows if pair_phase_rows_for_plot is None else pair_phase_rows_for_plot
 
     estimates: dict[str, Any] = {}
 
     try:
         linear_result = estimate_distance_from_pair_rows(pair_phase_rows, estimate_args, source="analyze")
+        if plot_pair_rows:
+            rows_for_plot = sorted(plot_pair_rows, key=lambda item: int(item["freq_index"]))
+            fit_freq_indices = {
+                int(row["freq_index"])
+                for row in linear_result.get("rows", [])
+                if isinstance(row, dict) and "freq_index" in row
+            }
+            freqs_hz_np = np.array([float(row["freq_hz"]) for row in rows_for_plot], dtype=float)
+            wrapped_phase_np = np.array([float(row["pair_phase_rad"]) for row in rows_for_plot], dtype=float)
+            tolerance = float(linear_result.get("unwrap_upward_tolerance_rad", getattr(args, "unwrap_upward_tolerance_rad", 0.8)))
+            unwrapped_phase_np = unwrap_with_negative_slope_prior(
+                wrapped_phase_np,
+                upward_tolerance_rad=tolerance,
+            )
+            fitted_phase_np = float(linear_result["slope_rad_per_hz"]) * freqs_hz_np + float(linear_result["intercept_rad"])
+            residual_phase_np = unwrapped_phase_np - fitted_phase_np
+            linear_result["plot_rows"] = [
+                {
+                    "freq_index": int(row["freq_index"]),
+                    "freq_hz": float(row["freq_hz"]),
+                    "phase_wrapped": float(wrapped_phase),
+                    "phase_unwrapped": float(unwrapped_phase),
+                    "phase_residual": float(phase_residual),
+                    "used_for_fit": int(row["freq_index"]) in fit_freq_indices,
+                }
+                for row, wrapped_phase, unwrapped_phase, phase_residual in zip(
+                    rows_for_plot,
+                    wrapped_phase_np,
+                    unwrapped_phase_np,
+                    residual_phase_np,
+                )
+            ]
         linear_plot_path = plot_dir / "distance_linear_fit.png"
         save_estimate_plot(linear_result, linear_plot_path)
         linear_json_path = plot_dir / "distance_linear_fit.json"
@@ -1238,6 +1274,35 @@ def add_distance_estimates(
 
     try:
         phase_match_result = estimate_distance_phase_match_from_pair_rows(pair_phase_rows, estimate_args, source="analyze")
+        if plot_pair_rows:
+            rows_for_plot = sorted(plot_pair_rows, key=lambda item: int(item["freq_index"]))
+            fit_freq_indices = {
+                int(row["freq_index"])
+                for row in phase_match_result.get("rows", [])
+                if isinstance(row, dict) and "freq_index" in row
+            }
+            propagation_speed_mps = float(
+                phase_match_result.get("propagation_speed_mps", getattr(args, "propagation_speed_mps", 2.3e8))
+            )
+            best_distance_m = float(phase_match_result["distance_m"])
+            phase0_rad = float(phase_match_result.get("phase0_rad", 0.0))
+            phase_match_result["plot_rows"] = []
+            for row in rows_for_plot:
+                freq_hz = float(row["freq_hz"])
+                measured_phase = float(row["pair_phase_rad"])
+                model_phase = float(-4.0 * np.pi * freq_hz * best_distance_m / propagation_speed_mps + phase0_rad)
+                fitted_phase = float(wrap_to_pi(model_phase))
+                phase_error = float(wrap_to_pi(measured_phase - fitted_phase))
+                phase_match_result["plot_rows"].append(
+                    {
+                        "freq_index": int(row["freq_index"]),
+                        "freq_hz": float(freq_hz),
+                        "phase_wrapped_measured": measured_phase,
+                        "phase_wrapped_fit": fitted_phase,
+                        "phase_wrapped_error": phase_error,
+                        "used_for_fit": int(row["freq_index"]) in fit_freq_indices,
+                    }
+                )
         phase_match_plot_path = plot_dir / "distance_phase_match.png"
         save_phase_match_plot(phase_match_result, phase_match_plot_path)
         phase_match_json_path = plot_dir / "distance_phase_match.json"
@@ -1431,6 +1496,91 @@ def build_phase_canceled_rows(
     return canceled_rows, stats
 
 
+def _wrap_to_pi(values: np.ndarray) -> np.ndarray:
+    return (np.asarray(values, dtype=float) + np.pi) % (2.0 * np.pi) - np.pi
+
+
+def select_pre_cancel_front_segment(
+    pair_phase_rows: list[dict[str, Any]],
+    *,
+    min_segment_points: int = 12,
+    min_slope_diff_rad_per_bin: float = 0.25,
+    min_relative_sse_gain: float = 0.18,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    total_points = int(len(pair_phase_rows))
+    base_info: dict[str, Any] = {
+        "use_front_only": False,
+        "total_points": total_points,
+        "selected_points": total_points,
+        "split_row_index": None,
+        "split_freq_mhz": None,
+        "front_slope_rad_per_bin": None,
+        "back_slope_rad_per_bin": None,
+        "slope_diff_rad_per_bin": None,
+        "relative_sse_gain": 0.0,
+        "reason": "insufficient_points",
+    }
+    if total_points < max(2, 2 * int(min_segment_points)):
+        return pair_phase_rows, base_info
+
+    phases = np.array([float(row["pair_phase_rad"]) for row in pair_phase_rows], dtype=float)
+    freq_indices = np.array([int(row["freq_index"]) for row in pair_phase_rows], dtype=int)
+    phase_step = _wrap_to_pi(np.diff(phases))
+    index_step = np.maximum(1.0, np.diff(freq_indices).astype(float))
+    step_slope = phase_step / index_step
+    if step_slope.size < 2 * int(min_segment_points):
+        return pair_phase_rows, base_info
+
+    global_mean = float(np.mean(step_slope))
+    global_sse = float(np.sum((step_slope - global_mean) ** 2))
+    best_split = -1
+    best_sse = float("inf")
+    best_front_mean = 0.0
+    best_back_mean = 0.0
+    min_steps = int(min_segment_points)
+    for split in range(min_steps, int(step_slope.size) - min_steps + 1):
+        front = step_slope[:split]
+        back = step_slope[split:]
+        front_mean = float(np.mean(front))
+        back_mean = float(np.mean(back))
+        sse = float(np.sum((front - front_mean) ** 2) + np.sum((back - back_mean) ** 2))
+        if sse < best_sse:
+            best_sse = sse
+            best_split = int(split)
+            best_front_mean = front_mean
+            best_back_mean = back_mean
+
+    if best_split < 0:
+        return pair_phase_rows, base_info
+
+    split_row_index = int(best_split)
+    split_freq_mhz = float(pair_phase_rows[split_row_index]["freq_hz"]) / 1e6
+    slope_diff = float(abs(best_front_mean - best_back_mean))
+    if global_sse <= 1e-12:
+        relative_gain = 0.0
+    else:
+        relative_gain = float((global_sse - best_sse) / global_sse)
+    use_front_only = bool(
+        slope_diff >= float(min_slope_diff_rad_per_bin)
+        and relative_gain >= float(min_relative_sse_gain)
+    )
+    selected_rows = pair_phase_rows[: split_row_index + 1] if use_front_only else pair_phase_rows
+    reason = "split_detected_front_only" if use_front_only else "single_slope_or_weak_split"
+    info: dict[str, Any] = {
+        "use_front_only": use_front_only,
+        "total_points": total_points,
+        "selected_points": int(len(selected_rows)),
+        "split_row_index": split_row_index,
+        "split_freq_mhz": split_freq_mhz,
+        "front_slope_rad_per_bin": float(best_front_mean),
+        "back_slope_rad_per_bin": float(best_back_mean),
+        "slope_diff_rad_per_bin": slope_diff,
+        "relative_sse_gain": relative_gain,
+        "reason": reason,
+    }
+    return selected_rows, info
+
+
 def run_pre_cancel_distance_analysis(
     *,
     args: argparse.Namespace,
@@ -1478,6 +1628,11 @@ def run_pre_cancel_distance_analysis(
     pair_angle_csv_path = pre_cancel_plot_dir / "pair_angle_by_freq_pre_cancel.csv"
     save_pair_phase_csv(pair_phase_rows, pair_phase_csv_path)
     save_pair_angle_csv(pair_phase_rows, pair_angle_csv_path)
+    pair_phase_rows_for_distance, pre_cancel_segment_info = select_pre_cancel_front_segment(pair_phase_rows)
+    distance_pair_phase_csv_path = pre_cancel_plot_dir / "pair_phase_by_freq_pre_cancel_distance_input.csv"
+    distance_pair_angle_csv_path = pre_cancel_plot_dir / "pair_angle_by_freq_pre_cancel_distance_input.csv"
+    save_pair_phase_csv(pair_phase_rows_for_distance, distance_pair_phase_csv_path)
+    save_pair_angle_csv(pair_phase_rows_for_distance, distance_pair_angle_csv_path)
 
     expected_bursts = expected_burst_count(
         args.start_offset_hz,
@@ -1522,6 +1677,10 @@ def run_pre_cancel_distance_analysis(
         "pair_phase_plot_path": str(pair_phase_plot_path),
         "pair_phase_csv_path": str(pair_phase_csv_path),
         "pair_angle_csv_path": str(pair_angle_csv_path),
+        "distance_input_pair_phase_csv_path": str(distance_pair_phase_csv_path),
+        "distance_input_pair_angle_csv_path": str(distance_pair_angle_csv_path),
+        "distance_input_pair_point_count": int(len(pair_phase_rows_for_distance)),
+        "pre_cancel_segment_selection": pre_cancel_segment_info,
         "initiator_freq_diagnostics": initiator_diag,
         "reflector_freq_diagnostics": reflector_diag,
         "pair_freq_diagnostics": pair_diag,
@@ -1533,6 +1692,21 @@ def run_pre_cancel_distance_analysis(
     print(f"saved_pre_cancel_pair_phase_plot: {pair_phase_plot_path}")
     print(f"saved_pre_cancel_pair_phase_csv: {pair_phase_csv_path}")
     print(f"saved_pre_cancel_pair_angle_csv: {pair_angle_csv_path}")
+    print(f"saved_pre_cancel_distance_input_pair_phase_csv: {distance_pair_phase_csv_path}")
+    if bool(pre_cancel_segment_info.get("use_front_only", False)):
+        print("pre_cancel_segment_selector: front_only")
+        print(
+            "pre_cancel_segment_points: {selected}/{total}, split_freq_mhz: {split_freq:.3f}, "
+            "front_slope_rad_per_bin: {front_slope:.4f}, back_slope_rad_per_bin: {back_slope:.4f}".format(
+                selected=int(pre_cancel_segment_info.get("selected_points", 0)),
+                total=int(pre_cancel_segment_info.get("total_points", 0)),
+                split_freq=float(pre_cancel_segment_info.get("split_freq_mhz") or 0.0),
+                front_slope=float(pre_cancel_segment_info.get("front_slope_rad_per_bin") or 0.0),
+                back_slope=float(pre_cancel_segment_info.get("back_slope_rad_per_bin") or 0.0),
+            )
+        )
+    else:
+        print("pre_cancel_segment_selector: full_range")
 
     if not args.no_distance_estimates:
         pre_cancel_args = argparse.Namespace(**vars(args))
@@ -1540,9 +1714,10 @@ def run_pre_cancel_distance_analysis(
         add_distance_estimates(
             pre_cancel_result,
             pre_cancel_args,
-            pair_phase_rows,
+            pair_phase_rows_for_distance,
             initiator_canceled_rows,
             reflector_canceled_rows,
+            pair_phase_rows_for_plot=pair_phase_rows,
         )
 
     print_distance_summary(pre_cancel_result, disabled=bool(args.no_distance_estimates))
@@ -1679,6 +1854,7 @@ def run_capture_analysis(
             pair_phase_rows,
             result["initiator"]["rows"],
             result["reflector"]["rows"],
+            pair_phase_rows_for_plot=pair_phase_rows,
         )
 
     print(f"capture_group: {capture_group}")
