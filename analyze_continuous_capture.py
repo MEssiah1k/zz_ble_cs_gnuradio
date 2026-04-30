@@ -39,6 +39,26 @@ DEFAULT_CAPTURE_GROUPS = [
         "initiator_file": "data_initiator_rx_from_reflector_measurement",
     },
 ]
+DEFAULT_1TO2_CAPTURE_GROUPS = [
+    {
+        "label": "calibration",
+        "distance_m": 2.0,
+        "initiator_file": "data_initiator_rx_from_reflectors_calibration",
+        "reflector_files": {
+            "reflector1": "data_reflector1_rx_from_initiator_calibration",
+            "reflector2": "data_reflector2_rx_from_initiator_calibration",
+        },
+    },
+    {
+        "label": "measurement",
+        "distance_m": 4.0,
+        "initiator_file": "data_initiator_rx_from_reflectors_measurement",
+        "reflector_files": {
+            "reflector1": "data_reflector1_rx_from_initiator_measurement",
+            "reflector2": "data_reflector2_rx_from_initiator_measurement",
+        },
+    },
+]
 PAIR_FREQ_CSV_FIELDS = [
     "freq_index",
     "freq_hz",
@@ -99,8 +119,51 @@ def resolve_group_file(root: Path, value: str | Path) -> Path:
     return resolve_root(root) / path
 
 
-def capture_group_specs(config: dict[str, Any]) -> list[dict[str, Any]]:
-    raw_groups = config.get("capture_groups", DEFAULT_CAPTURE_GROUPS)
+def infer_capture_mode(root: Path, config: dict[str, Any], requested_mode: str = "auto") -> str:
+    if requested_mode != "auto":
+        return requested_mode
+    config_mode = str(config.get("mode", "auto"))
+    if config_mode != "auto":
+        return config_mode
+    if resolve_root(root).name == "1to2":
+        return "1to2"
+    return "1to1"
+
+
+def default_capture_groups_for_mode(mode: str) -> list[dict[str, Any]]:
+    if mode == "1to2":
+        return DEFAULT_1TO2_CAPTURE_GROUPS
+    return DEFAULT_CAPTURE_GROUPS
+
+
+def should_use_config_capture_groups(config: dict[str, Any], root: Path, mode: str) -> bool:
+    if "capture_groups" not in config:
+        return False
+    config_root = config.get("root")
+    if config_root is None:
+        root_matches = True
+    else:
+        root_matches = Path(str(config_root)).name == resolve_root(root).name
+    if not root_matches:
+        return False
+
+    raw_groups = config.get("capture_groups")
+    if not isinstance(raw_groups, list) or not raw_groups:
+        return True
+    first = raw_groups[0]
+    if not isinstance(first, dict):
+        return True
+    if mode == "1to2":
+        return "reflector_files" in first
+    return "reflector_file" in first
+
+
+def capture_group_specs(config: dict[str, Any], root: Path, mode: str) -> list[dict[str, Any]]:
+    raw_groups = (
+        config.get("capture_groups")
+        if should_use_config_capture_groups(config, root, mode)
+        else default_capture_groups_for_mode(mode)
+    )
     if not isinstance(raw_groups, list):
         raise SystemExit("capture_groups 必须是 list")
 
@@ -109,19 +172,101 @@ def capture_group_specs(config: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(item, dict):
             raise SystemExit(f"capture_groups[{idx}] 必须是 JSON object")
         label = str(item.get("label", f"group{idx + 1}"))
-        reflector_file = item.get("reflector_file")
         initiator_file = item.get("initiator_file")
-        if reflector_file is None or initiator_file is None:
-            raise SystemExit(f"capture_groups[{idx}] 缺少 reflector_file 或 initiator_file")
-        groups.append(
-            {
-                "label": label,
-                "distance_m": item.get("distance_m"),
-                "reflector_file": str(reflector_file),
-                "initiator_file": str(initiator_file),
+        reflector_file = item.get("reflector_file")
+        reflector_files = item.get("reflector_files")
+        if initiator_file is None:
+            raise SystemExit(f"capture_groups[{idx}] 缺少 initiator_file")
+        if reflector_file is None and reflector_files is None:
+            raise SystemExit(f"capture_groups[{idx}] 缺少 reflector_file 或 reflector_files")
+
+        spec: dict[str, Any] = {
+            "label": label,
+            "distance_m": item.get("distance_m"),
+            "initiator_file": str(initiator_file),
+        }
+        if reflector_files is not None:
+            if not isinstance(reflector_files, dict):
+                raise SystemExit(f"capture_groups[{idx}].reflector_files 必须是 JSON object")
+            spec["reflector_files"] = {
+                str(name): str(path) for name, path in reflector_files.items()
             }
-        )
+        else:
+            spec["reflector_file"] = str(reflector_file)
+        groups.append(spec)
     return groups
+
+
+def _append_suffix_to_measurement_file(file_name: str, suffix: str) -> str:
+    if not suffix:
+        return file_name
+    return f"{file_name}{suffix}"
+
+
+def expand_measurement_groups(
+    groups: list[dict[str, Any]],
+    *,
+    enabled: bool,
+    total_measurement_groups: int,
+) -> list[dict[str, Any]]:
+    if not enabled or int(total_measurement_groups) <= 1:
+        return groups
+
+    expanded: list[dict[str, Any]] = []
+    for group in groups:
+        expanded.append(group)
+        if str(group.get("label", "")).lower() != "measurement":
+            continue
+
+        for idx in range(2, int(total_measurement_groups) + 1):
+            suffix = str(idx)
+            item = dict(group)
+            item["label"] = f"measurement{idx}"
+            if "reflector_files" in item:
+                item["reflector_files"] = {
+                    name: _append_suffix_to_measurement_file(str(path), suffix)
+                    for name, path in dict(item["reflector_files"]).items()
+                }
+            else:
+                item["reflector_file"] = _append_suffix_to_measurement_file(str(item["reflector_file"]), suffix)
+            item["initiator_file"] = _append_suffix_to_measurement_file(str(item["initiator_file"]), suffix)
+            expanded.append(item)
+    return expanded
+
+
+def run_spec_files_exist(spec: dict[str, Any]) -> tuple[bool, list[str]]:
+    missing: list[str] = []
+    initiator_file = spec.get("initiator_file")
+    if isinstance(initiator_file, Path) and (not initiator_file.exists() or initiator_file.stat().st_size <= 0):
+        missing.append(str(initiator_file))
+
+    reflector_file = spec.get("reflector_file")
+    if isinstance(reflector_file, Path) and (not reflector_file.exists() or reflector_file.stat().st_size <= 0):
+        missing.append(str(reflector_file))
+
+    reflector_files = spec.get("reflector_files")
+    if isinstance(reflector_files, dict):
+        for path in reflector_files.values():
+            if isinstance(path, Path) and (not path.exists() or path.stat().st_size <= 0):
+                missing.append(str(path))
+    return not missing, missing
+
+
+def skip_missing_measurement_run_specs(run_specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for spec in run_specs:
+        label = str(spec.get("label", ""))
+        if not label.lower().startswith("measurement"):
+            filtered.append(spec)
+            continue
+        exists, missing = run_spec_files_exist(spec)
+        if exists:
+            filtered.append(spec)
+        else:
+            print(f"skip_missing_capture_group: {label} (missing {len(missing)} file(s))")
+            for path in missing:
+                print(f"  missing_file: {path}")
+    return filtered
 
 
 def load_gr_complex_bin(path: Path) -> np.ndarray:
@@ -1158,6 +1303,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze continuous file-sink captures")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="JSON 配置文件路径；默认读取 continuous_capture_config.json")
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="实验目录名或路径，例如 1to1 / 1to1_2sides")
+    parser.add_argument("--mode", choices=("auto", "1to1", "1to2"), default="auto", help="采集文件结构；auto 会根据 --root 自动判断")
     parser.add_argument("--reflector-file", type=Path, default=None)
     parser.add_argument("--initiator-file", type=Path, default=None)
     parser.add_argument("--center-freq-hz", type=float, default=2.44e9)
@@ -1178,11 +1324,13 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--save-pair-csv", type=Path, default=None)
     parser.add_argument("--save-pair-angle-csv", type=Path, default=None)
     parser.add_argument("--capture-group", default="all", help="要分析的采集组 label；默认 all。配置文件里当前默认有 calibration 和 measurement")
+    parser.add_argument("--all-measurement-groups", action="store_true", help="分析 measurement 到 measurement8 全部测量组；默认只分析第一组 measurement")
+    parser.add_argument("--measurement-group-count", type=int, default=8, help="--all-measurement-groups 启用时的测量组数量，默认 8")
     parser.add_argument("--no-distance-estimates", action="store_true", help="只做 burst 分析，不生成两种距离估计结果")
-    parser.add_argument("--distance-min-m", type=float, default=0.0, help="兼容旧配置；当前 phase-match 改为围绕斜率距离局部搜索")
-    parser.add_argument("--distance-max-m", type=float, default=20.0, help="兼容旧配置；当前 phase-match 改为围绕斜率距离局部搜索")
-    parser.add_argument("--distance-step-m", type=float, default=0.01, help="phase-match 距离搜索步进")
-    parser.add_argument("--match-window-m", type=float, default=10.0, help="phase-match 围绕线性斜率距离的搜索半窗口")
+    parser.add_argument("--distance-min-m", type=float, default=0.0, help="全局 spectrum matching 距离搜索下限")
+    parser.add_argument("--distance-max-m", type=float, default=30.0, help="全局 spectrum matching 距离搜索上限")
+    parser.add_argument("--distance-step-m", type=float, default=0.01, help="spectrum matching 距离搜索步进")
+    parser.add_argument("--match-window-m", type=float, default=10.0, help="兼容旧配置；当前全局 spectrum matching 不使用该参数")
     parser.add_argument("--propagation-speed-mps", type=float, default=2.3e8, help="传播速度，默认 2.3e8 m/s（铜质有线测量）")
     parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.8, help="线性拟合 unwrap 时允许相邻频点小幅上升的容差")
     return parser
@@ -1201,7 +1349,7 @@ def add_distance_estimates(
         estimate_distance_from_pair_rows,
         save_estimate_plot,
         save_side_phase_plot,
-        unwrap_with_negative_slope_prior,
+        unwrap_wrapped_to_fit_line,
     )
     from estimate_distance_continuous_phase_match import (
         estimate_distance_phase_match_from_pair_rows,
@@ -1213,6 +1361,7 @@ def add_distance_estimates(
     estimate_args.pair_csv = None
     plot_dir = args.save_plot_dir.resolve()
     plot_pair_rows = pair_phase_rows if pair_phase_rows_for_plot is None else pair_phase_rows_for_plot
+    distance_freq_indices = {int(row["freq_index"]) for row in pair_phase_rows}
 
     estimates: dict[str, Any] = {}
 
@@ -1225,14 +1374,12 @@ def add_distance_estimates(
                 for row in linear_result.get("rows", [])
                 if isinstance(row, dict) and "freq_index" in row
             }
+            if distance_freq_indices:
+                fit_freq_indices &= distance_freq_indices
             freqs_hz_np = np.array([float(row["freq_hz"]) for row in rows_for_plot], dtype=float)
             wrapped_phase_np = np.array([float(row["pair_phase_rad"]) for row in rows_for_plot], dtype=float)
-            tolerance = float(linear_result.get("unwrap_upward_tolerance_rad", getattr(args, "unwrap_upward_tolerance_rad", 0.8)))
-            unwrapped_phase_np = unwrap_with_negative_slope_prior(
-                wrapped_phase_np,
-                upward_tolerance_rad=tolerance,
-            )
             fitted_phase_np = float(linear_result["slope_rad_per_hz"]) * freqs_hz_np + float(linear_result["intercept_rad"])
+            unwrapped_phase_np = unwrap_wrapped_to_fit_line(wrapped_phase_np, fitted_phase_np)
             residual_phase_np = unwrapped_phase_np - fitted_phase_np
             linear_result["plot_rows"] = [
                 {
@@ -1281,6 +1428,8 @@ def add_distance_estimates(
                 for row in phase_match_result.get("rows", [])
                 if isinstance(row, dict) and "freq_index" in row
             }
+            if distance_freq_indices:
+                fit_freq_indices &= distance_freq_indices
             propagation_speed_mps = float(
                 phase_match_result.get("propagation_speed_mps", getattr(args, "propagation_speed_mps", 2.3e8))
             )
@@ -1303,17 +1452,17 @@ def add_distance_estimates(
                         "used_for_fit": int(row["freq_index"]) in fit_freq_indices,
                     }
                 )
-        phase_match_plot_path = plot_dir / "distance_phase_match.png"
+        phase_match_plot_path = plot_dir / "distance_spectrum_match.png"
         save_phase_match_plot(phase_match_result, phase_match_plot_path)
-        phase_match_json_path = plot_dir / "distance_phase_match.json"
+        phase_match_json_path = plot_dir / "distance_spectrum_match.json"
         phase_match_json_path.write_text(json.dumps(phase_match_result, indent=2, ensure_ascii=False), encoding="utf-8")
 
         phase_match_result["plot_path"] = str(phase_match_plot_path)
         phase_match_result["json_path"] = str(phase_match_json_path)
         estimates["phase_match"] = phase_match_result
-        print(f"phase_match_distance_m: {phase_match_result['distance_m']}")
-        print(f"saved_phase_match_plot: {phase_match_plot_path}")
-        print(f"saved_phase_match_json: {phase_match_json_path}")
+        print(f"spectrum_match_distance_m: {phase_match_result['distance_m']}")
+        print(f"saved_spectrum_match_plot: {phase_match_plot_path}")
+        print(f"saved_spectrum_match_json: {phase_match_json_path}")
     except SystemExit as exc:
         estimates["phase_match"] = {"error": str(exc)}
         print(f"phase_match_error: {exc}")
@@ -1343,11 +1492,11 @@ def print_distance_summary(result: dict[str, Any], *, disabled: bool) -> None:
         print(f"distance_linear_fit_m: error ({linear.get('error', 'unknown')})")
 
     if phase_match is None:
-        print("distance_phase_match_m: unavailable")
+        print("distance_spectrum_match_m: unavailable")
     elif "distance_m" in phase_match:
-        print(f"distance_phase_match_m: {float(phase_match['distance_m'])}")
+        print(f"distance_spectrum_match_m: {float(phase_match['distance_m'])}")
     else:
-        print(f"distance_phase_match_m: error ({phase_match.get('error', 'unknown')})")
+        print(f"distance_spectrum_match_m: error ({phase_match.get('error', 'unknown')})")
 
 
 def _format_optional_distance(value: Any) -> str:
@@ -1377,7 +1526,7 @@ def _distance_summary_line(group: str, estimates: Any) -> str:
         phase_match_text = _format_estimate_distance(phase_match if isinstance(phase_match, dict) else None)
     return (
         "distance_summary_group: {group}, "
-        "distance_linear_fit_m: {linear}, distance_phase_match_m: {phase_match}".format(
+        "distance_linear_fit_m: {linear}, distance_spectrum_match_m: {phase_match}".format(
             group=group,
             linear=linear_text,
             phase_match=phase_match_text,
@@ -1500,6 +1649,280 @@ def _wrap_to_pi(values: np.ndarray) -> np.ndarray:
     return (np.asarray(values, dtype=float) + np.pi) % (2.0 * np.pi) - np.pi
 
 
+def _solve_wrapped_phase_offset(residual_phase: np.ndarray) -> tuple[float, np.ndarray]:
+    phase0 = float(np.angle(np.mean(np.exp(1j * residual_phase))))
+    error = _wrap_to_pi(residual_phase - phase0)
+    abs_error = np.abs(error)
+    mad = float(np.median(abs_error))
+    threshold = max(0.45, 6.0 * 1.4826 * mad)
+    keep_mask = abs_error <= threshold
+    if int(np.count_nonzero(keep_mask)) >= max(3, residual_phase.size // 2):
+        phase0 = float(np.angle(np.mean(np.exp(1j * residual_phase[keep_mask]))))
+        error = _wrap_to_pi(residual_phase - phase0)
+    return phase0, np.asarray(error, dtype=float)
+
+
+def _fit_wrapped_distance_model(
+    rows: list[dict[str, Any]],
+    *,
+    distance_min_m: float,
+    distance_max_m: float,
+    distance_step_m: float,
+    propagation_speed_mps: float,
+) -> dict[str, Any] | None:
+    if len(rows) < 2 or distance_step_m <= 0.0 or distance_max_m < distance_min_m or propagation_speed_mps <= 0.0:
+        return None
+
+    freqs_hz = np.array([float(row["freq_hz"]) for row in rows], dtype=float)
+    phases = np.array([float(row["pair_phase_rad"]) for row in rows], dtype=float)
+    distances_m = np.arange(float(distance_min_m), float(distance_max_m) + 0.5 * float(distance_step_m), float(distance_step_m))
+    if distances_m.size == 0:
+        return None
+
+    best_cost = float("inf")
+    best_distance_m = float(distances_m[0])
+    best_phase0_rad = 0.0
+    best_residual = np.zeros_like(phases)
+    for distance_m in distances_m:
+        model = -4.0 * np.pi * freqs_hz * float(distance_m) / float(propagation_speed_mps)
+        phase0, residual = _solve_wrapped_phase_offset(_wrap_to_pi(phases - model))
+        cost = float(np.mean(residual * residual))
+        if cost < best_cost:
+            best_cost = cost
+            best_distance_m = float(distance_m)
+            best_phase0_rad = phase0
+            best_residual = residual
+
+    return {
+        "best_distance_m": float(best_distance_m),
+        "best_phase0_rad": float(best_phase0_rad),
+        "best_cost": float(best_cost),
+        "residual": best_residual,
+        "freqs_hz": freqs_hz,
+        "phases": phases,
+    }
+
+
+def _split_contiguous_freq_segments(
+    rows: list[dict[str, Any]],
+    *,
+    max_wrapped_step_rad_per_bin: float = 0.6,
+) -> list[list[dict[str, Any]]]:
+    if not rows:
+        return []
+    sorted_rows = sorted(rows, key=lambda item: int(item["freq_index"]))
+    segments: list[list[dict[str, Any]]] = [[sorted_rows[0]]]
+    for row in sorted_rows[1:]:
+        prev_row = segments[-1][-1]
+        prev_index = int(prev_row["freq_index"])
+        curr_index = int(row["freq_index"])
+        index_step = max(1, curr_index - prev_index)
+        phase_step = float(_wrap_to_pi(np.array([float(row["pair_phase_rad"]) - float(prev_row["pair_phase_rad"])]))[0]) / float(index_step)
+        continuous = curr_index == prev_index + 1 and abs(phase_step) <= float(max_wrapped_step_rad_per_bin)
+        if continuous:
+            segments[-1].append(row)
+        else:
+            segments.append([row])
+    return segments
+
+
+def align_phase_segments_across_missing_freqs(
+    pair_phase_rows: list[dict[str, Any]],
+    *,
+    distance_min_m: float = 0.0,
+    distance_max_m: float = 30.0,
+    distance_step_m: float = 0.01,
+    propagation_speed_mps: float = 2.3e8,
+    min_segment_points: int = 8,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Align phase offsets of stable phase segments separated by gaps or jumps."""
+    total_points = int(len(pair_phase_rows))
+    segments = _split_contiguous_freq_segments(pair_phase_rows)
+    info: dict[str, Any] = {
+        "enabled": True,
+        "method": "wrapped_stable_segment_offset_alignment",
+        "total_points": total_points,
+        "segment_count": int(len(segments)),
+        "adjusted_segment_count": 0,
+        "reference_segment_index": None,
+        "reference_distance_m": None,
+        "segment_offsets_rad": [],
+        "reason": "no_phase_segment_gaps",
+    }
+    if len(segments) <= 1:
+        return pair_phase_rows, info
+
+    usable_segment_indices = [idx for idx, segment in enumerate(segments) if len(segment) >= int(min_segment_points)]
+    if not usable_segment_indices:
+        info["reason"] = "no_segment_long_enough"
+        return pair_phase_rows, info
+
+    reference_segment_index = usable_segment_indices[0]
+    reference_segment = segments[reference_segment_index]
+    model_fit = _fit_wrapped_distance_model(
+        reference_segment,
+        distance_min_m=distance_min_m,
+        distance_max_m=distance_max_m,
+        distance_step_m=distance_step_m,
+        propagation_speed_mps=propagation_speed_mps,
+    )
+    if model_fit is None:
+        info["reason"] = "reference_fit_failed"
+        return pair_phase_rows, info
+
+    reference_distance_m = float(model_fit["best_distance_m"])
+    reference_phase0 = float(model_fit["best_phase0_rad"])
+    adjusted_rows: list[dict[str, Any]] = []
+    adjusted_segment_count = 0
+    segment_offsets: list[dict[str, Any]] = []
+
+    for segment_index, segment in enumerate(segments):
+        freqs_hz = np.array([float(row["freq_hz"]) for row in segment], dtype=float)
+        phases = np.array([float(row["pair_phase_rad"]) for row in segment], dtype=float)
+        model = -4.0 * np.pi * freqs_hz * reference_distance_m / float(propagation_speed_mps)
+        phase0, residual = _solve_wrapped_phase_offset(_wrap_to_pi(phases - model))
+        offset_delta = float(_wrap_to_pi(np.array([phase0 - reference_phase0]))[0])
+        adjust_segment = segment_index != reference_segment_index and len(segment) >= int(min_segment_points)
+        if adjust_segment and abs(offset_delta) > 1e-9:
+            adjusted_segment_count += 1
+        segment_offsets.append(
+            {
+                "segment_index": int(segment_index),
+                "start_freq_index": int(segment[0]["freq_index"]),
+                "stop_freq_index": int(segment[-1]["freq_index"]),
+                "point_count": int(len(segment)),
+                "phase0_rad": float(phase0),
+                "offset_delta_rad": float(offset_delta),
+                "adjusted": bool(adjust_segment),
+                "rms_residual_rad": float(np.sqrt(np.mean(residual * residual))) if residual.size else None,
+            }
+        )
+        for row in segment:
+            tagged = dict(row)
+            tagged["gap_alignment_segment_index"] = int(segment_index)
+            tagged["gap_alignment_offset_delta_rad"] = float(offset_delta if adjust_segment else 0.0)
+            if adjust_segment:
+                tagged["pair_phase_rad"] = float(_wrap_to_pi(np.array([float(row["pair_phase_rad"]) - offset_delta]))[0])
+            adjusted_rows.append(tagged)
+
+    info.update(
+        {
+            "adjusted_segment_count": int(adjusted_segment_count),
+            "reference_segment_index": int(reference_segment_index),
+            "reference_distance_m": float(reference_distance_m),
+            "reference_phase0_rad": float(reference_phase0),
+            "segment_offsets_rad": segment_offsets,
+            "reason": "segments_aligned" if adjusted_segment_count else "segments_already_aligned",
+        }
+    )
+    return adjusted_rows, info
+
+
+def reject_pair_phase_outliers(
+    pair_phase_rows: list[dict[str, Any]],
+    *,
+    distance_min_m: float = 0.0,
+    distance_max_m: float = 30.0,
+    distance_step_m: float = 0.01,
+    propagation_speed_mps: float = 2.3e8,
+    max_residual_rad: float = 0.45,
+    mad_scale: float = 6.0,
+    min_keep_points: int = 8,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Remove obvious pair-frequency outliers using wrapped spectrum-match residuals."""
+    total_points = int(len(pair_phase_rows))
+    info: dict[str, Any] = {
+        "enabled": True,
+        "method": "wrapped_spectrum_match_residual",
+        "total_points": total_points,
+        "kept_points": total_points,
+        "removed_points": 0,
+        "removed_freq_indices": [],
+        "distance_min_m": float(distance_min_m),
+        "distance_max_m": float(distance_max_m),
+        "distance_step_m": float(distance_step_m),
+        "propagation_speed_mps": float(propagation_speed_mps),
+        "max_residual_rad": float(max_residual_rad),
+        "mad_scale": float(mad_scale),
+        "threshold_rad": None,
+        "reason": "insufficient_points",
+    }
+    if total_points < max(3, int(min_keep_points) + 1):
+        return pair_phase_rows, info
+
+    rows = sorted(pair_phase_rows, key=lambda item: int(item["freq_index"]))
+    model_fit = _fit_wrapped_distance_model(
+        rows,
+        distance_min_m=distance_min_m,
+        distance_max_m=distance_max_m,
+        distance_step_m=distance_step_m,
+        propagation_speed_mps=propagation_speed_mps,
+    )
+    if model_fit is None:
+        info["reason"] = "distance_model_fit_failed"
+        return pair_phase_rows, info
+    best_distance_m = float(model_fit["best_distance_m"])
+    best_phase0_rad = float(model_fit["best_phase0_rad"])
+    best_cost = float(model_fit["best_cost"])
+    best_residual = np.asarray(model_fit["residual"], dtype=float)
+
+    median_residual = float(np.angle(np.mean(np.exp(1j * best_residual))))
+    abs_dev = np.abs(_wrap_to_pi(best_residual - median_residual))
+    mad = float(np.median(abs_dev))
+    robust_sigma = 1.4826 * mad
+    threshold = max(float(max_residual_rad), float(mad_scale) * robust_sigma)
+    keep_mask = abs_dev <= threshold
+
+    if int(np.count_nonzero(keep_mask)) < int(min_keep_points):
+        info.update(
+            {
+                "threshold_rad": float(threshold),
+                "reason": "too_many_outliers_would_be_removed",
+            }
+        )
+        return pair_phase_rows, info
+
+    filtered_rows: list[dict[str, Any]] = []
+    removed_freq_indices: list[int] = []
+    for keep, row, phase_residual, phase_abs_dev in zip(keep_mask, rows, best_residual, abs_dev):
+        tagged = dict(row)
+        tagged["outlier_filter_residual_rad"] = float(phase_residual)
+        tagged["outlier_filter_abs_dev_rad"] = float(phase_abs_dev)
+        tagged["outlier_filter_used_for_distance"] = bool(keep)
+        if keep:
+            filtered_rows.append(tagged)
+        else:
+            removed_freq_indices.append(int(row["freq_index"]))
+
+    info.update(
+        {
+            "kept_points": int(len(filtered_rows)),
+            "removed_points": int(len(removed_freq_indices)),
+            "removed_freq_indices": removed_freq_indices,
+            "median_residual_rad": float(median_residual),
+            "mad_residual_rad": float(mad),
+            "robust_sigma_rad": float(robust_sigma),
+            "threshold_rad": float(threshold),
+            "best_distance_m": float(best_distance_m),
+            "best_phase0_rad": float(best_phase0_rad),
+            "best_cost": float(best_cost),
+            "reason": "outliers_removed" if removed_freq_indices else "no_outliers",
+        }
+    )
+    return filtered_rows, info
+
+
+def disabled_pre_cancel_segment_info(pair_phase_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    total_points = int(len(pair_phase_rows))
+    return {
+        "enabled": False,
+        "use_front_only": False,
+        "total_points": total_points,
+        "selected_points": total_points,
+        "reason": "disabled_to_decouple_unwrap_from_spectrum_match",
+    }
+
+
 def select_pre_cancel_front_segment(
     pair_phase_rows: list[dict[str, Any]],
     *,
@@ -1586,9 +2009,13 @@ def run_pre_cancel_distance_analysis(
     args: argparse.Namespace,
     all_results: list[dict[str, Any]],
     base_plot_dir: Path,
+    calibration_result: dict[str, Any] | None = None,
+    measurement_result: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    calibration_result = _pick_group_result_for_pre_cancel(all_results, role="calibration")
-    measurement_result = _pick_group_result_for_pre_cancel(all_results, role="measurement")
+    if calibration_result is None:
+        calibration_result = _pick_group_result_for_pre_cancel(all_results, role="calibration")
+    if measurement_result is None:
+        measurement_result = _pick_group_result_for_pre_cancel(all_results, role="measurement")
     if calibration_result is None or measurement_result is None:
         print("pre_cancel_distance: skipped (需要同时存在 calibration 与 measurement 采集组)")
         return None
@@ -1617,7 +2044,9 @@ def run_pre_cancel_distance_analysis(
         side_name="reflector",
     )
 
-    pre_cancel_plot_dir = (base_plot_dir / "measurement_minus_calibration_pre_cancel").resolve()
+    measurement_label = str(measurement_result.get("capture_group", "measurement"))
+    pre_cancel_name = f"{measurement_label}_minus_calibration_pre_cancel"
+    pre_cancel_plot_dir = (base_plot_dir / pre_cancel_name).resolve()
     pair_phase_plot_path = pre_cancel_plot_dir / "pair_phase_by_freq_pre_cancel.png"
     pair_phase_rows = plot_pair_phase_by_freq(
         reflector_canceled_rows,
@@ -1628,7 +2057,28 @@ def run_pre_cancel_distance_analysis(
     pair_angle_csv_path = pre_cancel_plot_dir / "pair_angle_by_freq_pre_cancel.csv"
     save_pair_phase_csv(pair_phase_rows, pair_phase_csv_path)
     save_pair_angle_csv(pair_phase_rows, pair_angle_csv_path)
-    pair_phase_rows_for_distance, pre_cancel_segment_info = select_pre_cancel_front_segment(pair_phase_rows)
+    pre_cancel_segment_info = disabled_pre_cancel_segment_info(pair_phase_rows)
+    pair_phase_rows_pre_filtered, initial_outlier_filter_info = reject_pair_phase_outliers(
+        pair_phase_rows,
+        distance_min_m=args.distance_min_m,
+        distance_max_m=args.distance_max_m,
+        distance_step_m=args.distance_step_m,
+        propagation_speed_mps=args.propagation_speed_mps,
+    )
+    pair_phase_rows_aligned, gap_alignment_info = align_phase_segments_across_missing_freqs(
+        pair_phase_rows_pre_filtered,
+        distance_min_m=args.distance_min_m,
+        distance_max_m=args.distance_max_m,
+        distance_step_m=args.distance_step_m,
+        propagation_speed_mps=args.propagation_speed_mps,
+    )
+    pair_phase_rows_for_distance, outlier_filter_info = reject_pair_phase_outliers(
+        pair_phase_rows_aligned,
+        distance_min_m=args.distance_min_m,
+        distance_max_m=args.distance_max_m,
+        distance_step_m=args.distance_step_m,
+        propagation_speed_mps=args.propagation_speed_mps,
+    )
     distance_pair_phase_csv_path = pre_cancel_plot_dir / "pair_phase_by_freq_pre_cancel_distance_input.csv"
     distance_pair_angle_csv_path = pre_cancel_plot_dir / "pair_angle_by_freq_pre_cancel_distance_input.csv"
     save_pair_phase_csv(pair_phase_rows_for_distance, distance_pair_phase_csv_path)
@@ -1655,8 +2105,7 @@ def run_pre_cancel_distance_analysis(
 
     pre_cancel_result: dict[str, Any] = {
         "root": str(measurement_result.get("root", resolve_root(args.root))),
-        "capture_group": "measurement_minus_calibration_pre_cancel",
-        "capture_distance_m": measurement_result.get("capture_distance_m"),
+        "capture_group": pre_cancel_name,
         "config_path": measurement_result.get("config_path"),
         "reflector_file": str(measurement_result.get("reflector_file", "")),
         "initiator_file": str(measurement_result.get("initiator_file", "")),
@@ -1681,6 +2130,9 @@ def run_pre_cancel_distance_analysis(
         "distance_input_pair_angle_csv_path": str(distance_pair_angle_csv_path),
         "distance_input_pair_point_count": int(len(pair_phase_rows_for_distance)),
         "pre_cancel_segment_selection": pre_cancel_segment_info,
+        "pre_cancel_initial_outlier_filter": initial_outlier_filter_info,
+        "pre_cancel_gap_alignment": gap_alignment_info,
+        "pre_cancel_outlier_filter": outlier_filter_info,
         "initiator_freq_diagnostics": initiator_diag,
         "reflector_freq_diagnostics": reflector_diag,
         "pair_freq_diagnostics": pair_diag,
@@ -1693,7 +2145,9 @@ def run_pre_cancel_distance_analysis(
     print(f"saved_pre_cancel_pair_phase_csv: {pair_phase_csv_path}")
     print(f"saved_pre_cancel_pair_angle_csv: {pair_angle_csv_path}")
     print(f"saved_pre_cancel_distance_input_pair_phase_csv: {distance_pair_phase_csv_path}")
-    if bool(pre_cancel_segment_info.get("use_front_only", False)):
+    if not bool(pre_cancel_segment_info.get("enabled", True)):
+        print("pre_cancel_segment_selector: disabled")
+    elif bool(pre_cancel_segment_info.get("use_front_only", False)):
         print("pre_cancel_segment_selector: front_only")
         print(
             "pre_cancel_segment_points: {selected}/{total}, split_freq_mhz: {split_freq:.3f}, "
@@ -1707,6 +2161,30 @@ def run_pre_cancel_distance_analysis(
         )
     else:
         print("pre_cancel_segment_selector: full_range")
+    if int(initial_outlier_filter_info.get("removed_points", 0)) > 0:
+        print(
+            "pre_cancel_initial_outlier_filter: removed {removed}/{total}, freq_indices={indices}".format(
+                removed=int(initial_outlier_filter_info.get("removed_points", 0)),
+                total=int(initial_outlier_filter_info.get("total_points", 0)),
+                indices=initial_outlier_filter_info.get("removed_freq_indices", []),
+            )
+        )
+    if int(outlier_filter_info.get("removed_points", 0)) > 0:
+        print(
+            "pre_cancel_outlier_filter: removed {removed}/{total}, freq_indices={indices}".format(
+                removed=int(outlier_filter_info.get("removed_points", 0)),
+                total=int(outlier_filter_info.get("total_points", 0)),
+                indices=outlier_filter_info.get("removed_freq_indices", []),
+            )
+        )
+    if int(gap_alignment_info.get("adjusted_segment_count", 0)) > 0:
+        print(
+            "pre_cancel_gap_alignment: adjusted_segments={adjusted}/{segments}, reference_distance_m={distance:.3f}".format(
+                adjusted=int(gap_alignment_info.get("adjusted_segment_count", 0)),
+                segments=int(gap_alignment_info.get("segment_count", 0)),
+                distance=float(gap_alignment_info.get("reference_distance_m") or 0.0),
+            )
+        )
 
     if not args.no_distance_estimates:
         pre_cancel_args = argparse.Namespace(**vars(args))
@@ -1717,40 +2195,361 @@ def run_pre_cancel_distance_analysis(
             pair_phase_rows_for_distance,
             initiator_canceled_rows,
             reflector_canceled_rows,
-            pair_phase_rows_for_plot=pair_phase_rows,
+            pair_phase_rows_for_plot=pair_phase_rows_for_distance,
         )
 
     print_distance_summary(pre_cancel_result, disabled=bool(args.no_distance_estimates))
     return pre_cancel_result
 
 
+def _analysis_parameters(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "center_freq_hz": float(args.center_freq_hz),
+        "start_offset_hz": float(args.start_offset_hz),
+        "stop_offset_hz": float(args.stop_offset_hz),
+        "step_hz": float(args.step_hz),
+        "repeats": int(args.repeats),
+        "sample_rate": float(args.sample_rate),
+        "smooth_len": int(args.smooth_len),
+        "threshold_ratio": float(args.threshold_ratio),
+        "gap_tolerance": int(args.gap_tolerance),
+        "min_segment_len": int(args.min_segment_len),
+        "edge_trim_samples": int(args.edge_trim_samples),
+        "jobs": int(args.jobs),
+        "no_burst_plots": bool(args.no_burst_plots),
+    }
+
+
+def run_multi_capture_analysis(
+    *,
+    args: argparse.Namespace,
+    root: Path,
+    capture_group: str,
+    initiator_file: Path,
+    reflector_files: dict[str, Path],
+    save_plot_dir: Path,
+    save_json: Path | None,
+) -> dict[str, Any]:
+    expected_bursts = expected_burst_count(
+        args.start_offset_hz,
+        args.stop_offset_hz,
+        args.step_hz,
+        args.repeats,
+    )
+
+    run_args = argparse.Namespace(**vars(args))
+    run_args.save_plot_dir = save_plot_dir
+    run_args.save_json = save_json
+
+    result: dict[str, Any] = {
+        "mode": "1to2",
+        "root": str(root),
+        "capture_group": str(capture_group),
+        "config_path": args.loaded_config,
+        "initiator_file": str(initiator_file),
+        "reflector_files": {name: str(path) for name, path in reflector_files.items()},
+        "analysis_parameters": _analysis_parameters(args),
+        "expected_burst_count": int(expected_bursts),
+        "initiator": analyze_one_capture("initiator", initiator_file, run_args),
+        "reflectors": {},
+        "pair_results": {},
+    }
+
+    expected_freq_count = int(round(float(expected_bursts) / float(args.repeats))) if args.repeats > 0 else 0
+    initiator_diag = build_side_freq_diagnostics(
+        result["initiator"]["rows"],
+        expected_freq_count=expected_freq_count,
+        expected_repeats=args.repeats,
+    )
+    result["initiator_freq_diagnostics"] = initiator_diag
+
+    print(f"capture_group: {capture_group}")
+    print(f"initiator_file: {initiator_file}")
+    for reflector_name, reflector_file in sorted(reflector_files.items()):
+        side_plot_dir = save_plot_dir / reflector_name
+        side_args = argparse.Namespace(**vars(run_args))
+        side_args.save_plot_dir = side_plot_dir
+        reflector_result = analyze_one_capture(reflector_name, reflector_file, side_args)
+        reflector_rows = reflector_result["rows"]
+        pair_phase_plot_path = side_plot_dir / "pair_phase_by_freq.png"
+        pair_phase_rows = plot_pair_phase_by_freq(
+            reflector_rows,
+            result["initiator"]["rows"],
+            pair_phase_plot_path,
+        )
+        pair_phase_csv_path = side_plot_dir / "pair_phase_by_freq.csv"
+        pair_angle_csv_path = side_plot_dir / "pair_angle_by_freq.csv"
+        save_pair_phase_csv(pair_phase_rows, pair_phase_csv_path)
+        save_pair_angle_csv(pair_phase_rows, pair_angle_csv_path)
+        reflector_diag = build_side_freq_diagnostics(
+            reflector_rows,
+            expected_freq_count=expected_freq_count,
+            expected_repeats=args.repeats,
+        )
+        pair_diag = build_pair_freq_diagnostics(initiator_diag, reflector_diag, pair_phase_rows)
+
+        result["reflectors"][reflector_name] = reflector_result
+        result["pair_results"][reflector_name] = {
+            "reflector_file": str(reflector_file),
+            "pair_phase_by_freq": pair_phase_rows,
+            "pair_phase_plot_path": str(pair_phase_plot_path),
+            "pair_phase_csv_path": str(pair_phase_csv_path),
+            "pair_angle_csv_path": str(pair_angle_csv_path),
+            "reflector_freq_diagnostics": reflector_diag,
+            "pair_freq_diagnostics": pair_diag,
+        }
+        print(f"reflector: {reflector_name}")
+        print(f"reflector_file: {reflector_file}")
+        print(f"saved_pair_phase_plot: {pair_phase_plot_path}")
+        print(f"saved_pair_phase_csv: {pair_phase_csv_path}")
+
+    print(f"saved_plot_dir: {save_plot_dir.resolve()}")
+    print(f"loaded_config: {args.loaded_config}")
+
+    if save_json is not None:
+        out_path = save_json.resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"saved_json: {out_path}")
+
+    return result
+
+
+def run_multi_pre_cancel_distance_analysis(
+    *,
+    args: argparse.Namespace,
+    all_results: list[dict[str, Any]],
+    base_plot_dir: Path,
+    calibration_result: dict[str, Any] | None = None,
+    measurement_result: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    if calibration_result is None:
+        calibration_result = _pick_group_result_for_pre_cancel(all_results, role="calibration")
+    if measurement_result is None:
+        measurement_result = _pick_group_result_for_pre_cancel(all_results, role="measurement")
+    if calibration_result is None or measurement_result is None:
+        print("multi_pre_cancel_distance: skipped (需要同时存在 calibration 与 measurement 采集组)")
+        return None
+
+    calibration_initiator_rows = calibration_result.get("initiator", {}).get("rows", [])
+    measurement_initiator_rows = measurement_result.get("initiator", {}).get("rows", [])
+    if not isinstance(calibration_initiator_rows, list) or not isinstance(measurement_initiator_rows, list):
+        print("multi_pre_cancel_distance: skipped (initiator rows 数据格式异常)")
+        return None
+
+    initiator_canceled_rows, initiator_canceled_stats = build_phase_canceled_rows(
+        measurement_initiator_rows,
+        calibration_initiator_rows,
+        side_name="initiator",
+    )
+
+    calibration_reflectors = calibration_result.get("reflectors", {})
+    measurement_reflectors = measurement_result.get("reflectors", {})
+    if not isinstance(calibration_reflectors, dict) or not isinstance(measurement_reflectors, dict):
+        print("multi_pre_cancel_distance: skipped (reflectors 数据格式异常)")
+        return None
+
+    common_reflectors = sorted(set(calibration_reflectors) & set(measurement_reflectors))
+    if not common_reflectors:
+        print("multi_pre_cancel_distance: skipped (没有公共 reflector)")
+        return None
+
+    measurement_label = str(measurement_result.get("capture_group", "measurement"))
+    pre_cancel_name = f"{measurement_label}_minus_calibration_pre_cancel"
+    base_dir = (base_plot_dir / pre_cancel_name).resolve()
+    result: dict[str, Any] = {
+        "mode": "1to2",
+        "root": str(measurement_result.get("root", resolve_root(args.root))),
+        "capture_group": pre_cancel_name,
+        "config_path": measurement_result.get("config_path"),
+        "measurement_capture_group": str(measurement_result.get("capture_group", "measurement")),
+        "calibration_capture_group": str(calibration_result.get("capture_group", "calibration")),
+        "analysis_parameters": dict(measurement_result.get("analysis_parameters", {})),
+        "expected_burst_count": int(expected_burst_count(args.start_offset_hz, args.stop_offset_hz, args.step_hz, args.repeats)),
+        "pre_cancel_method": "1to2: measurement_phase - calibration_phase per side, then mixed initiator * target reflector spectrum match",
+        "initiator": {
+            "rows": initiator_canceled_rows,
+            "summary": initiator_canceled_stats,
+        },
+        "reflectors": {},
+    }
+
+    print("multi_pre_cancel_distance_mode: measurement_minus_calibration_before_fit")
+    for reflector_name in common_reflectors:
+        calibration_rows = calibration_reflectors[reflector_name].get("rows", [])
+        measurement_rows = measurement_reflectors[reflector_name].get("rows", [])
+        if not isinstance(calibration_rows, list) or not isinstance(measurement_rows, list):
+            print(f"multi_pre_cancel_reflector_skipped: {reflector_name} (rows 数据格式异常)")
+            continue
+
+        reflector_canceled_rows, reflector_canceled_stats = build_phase_canceled_rows(
+            measurement_rows,
+            calibration_rows,
+            side_name=reflector_name,
+        )
+        reflector_dir = base_dir / reflector_name
+        pair_phase_plot_path = reflector_dir / "pair_phase_by_freq_pre_cancel.png"
+        pair_phase_rows = plot_pair_phase_by_freq(
+            reflector_canceled_rows,
+            initiator_canceled_rows,
+            pair_phase_plot_path,
+        )
+        pair_phase_csv_path = reflector_dir / "pair_phase_by_freq_pre_cancel.csv"
+        pair_angle_csv_path = reflector_dir / "pair_angle_by_freq_pre_cancel.csv"
+        save_pair_phase_csv(pair_phase_rows, pair_phase_csv_path)
+        save_pair_angle_csv(pair_phase_rows, pair_angle_csv_path)
+        pre_cancel_segment_info = disabled_pre_cancel_segment_info(pair_phase_rows)
+        pair_phase_rows_pre_filtered, initial_outlier_filter_info = reject_pair_phase_outliers(
+            pair_phase_rows,
+            distance_min_m=args.distance_min_m,
+            distance_max_m=args.distance_max_m,
+            distance_step_m=args.distance_step_m,
+            propagation_speed_mps=args.propagation_speed_mps,
+        )
+        pair_phase_rows_aligned, gap_alignment_info = align_phase_segments_across_missing_freqs(
+            pair_phase_rows_pre_filtered,
+            distance_min_m=args.distance_min_m,
+            distance_max_m=args.distance_max_m,
+            distance_step_m=args.distance_step_m,
+            propagation_speed_mps=args.propagation_speed_mps,
+        )
+        pair_phase_rows_for_distance, outlier_filter_info = reject_pair_phase_outliers(
+            pair_phase_rows_aligned,
+            distance_min_m=args.distance_min_m,
+            distance_max_m=args.distance_max_m,
+            distance_step_m=args.distance_step_m,
+            propagation_speed_mps=args.propagation_speed_mps,
+        )
+        distance_pair_phase_csv_path = reflector_dir / "pair_phase_by_freq_pre_cancel_distance_input.csv"
+        distance_pair_angle_csv_path = reflector_dir / "pair_angle_by_freq_pre_cancel_distance_input.csv"
+        save_pair_phase_csv(pair_phase_rows_for_distance, distance_pair_phase_csv_path)
+        save_pair_angle_csv(pair_phase_rows_for_distance, distance_pair_angle_csv_path)
+
+        pre_cancel_args = argparse.Namespace(**vars(args))
+        pre_cancel_args.save_plot_dir = reflector_dir
+        reflector_result: dict[str, Any] = {
+            "label": reflector_name,
+            "reflector": {
+                "rows": reflector_canceled_rows,
+                "summary": reflector_canceled_stats,
+            },
+            "pair_phase_by_freq": pair_phase_rows,
+            "pair_phase_plot_path": str(pair_phase_plot_path),
+            "pair_phase_csv_path": str(pair_phase_csv_path),
+            "pair_angle_csv_path": str(pair_angle_csv_path),
+            "distance_input_pair_phase_csv_path": str(distance_pair_phase_csv_path),
+            "distance_input_pair_angle_csv_path": str(distance_pair_angle_csv_path),
+            "distance_input_pair_point_count": int(len(pair_phase_rows_for_distance)),
+            "pre_cancel_segment_selection": pre_cancel_segment_info,
+            "pre_cancel_initial_outlier_filter": initial_outlier_filter_info,
+            "pre_cancel_gap_alignment": gap_alignment_info,
+            "pre_cancel_outlier_filter": outlier_filter_info,
+        }
+        if not args.no_distance_estimates:
+            add_distance_estimates(
+                reflector_result,
+                pre_cancel_args,
+                pair_phase_rows_for_distance,
+                initiator_canceled_rows,
+                reflector_canceled_rows,
+                pair_phase_rows_for_plot=pair_phase_rows_for_distance,
+            )
+
+        result["reflectors"][reflector_name] = reflector_result
+        print(f"multi_pre_cancel_reflector: {reflector_name}")
+        print(f"saved_pre_cancel_pair_phase_plot: {pair_phase_plot_path}")
+        if int(initial_outlier_filter_info.get("removed_points", 0)) > 0:
+            print(
+                "multi_pre_cancel_initial_outlier_filter: reflector={reflector}, removed {removed}/{total}, freq_indices={indices}".format(
+                    reflector=reflector_name,
+                    removed=int(initial_outlier_filter_info.get("removed_points", 0)),
+                    total=int(initial_outlier_filter_info.get("total_points", 0)),
+                    indices=initial_outlier_filter_info.get("removed_freq_indices", []),
+                )
+            )
+        if int(outlier_filter_info.get("removed_points", 0)) > 0:
+            print(
+                "multi_pre_cancel_outlier_filter: reflector={reflector}, removed {removed}/{total}, freq_indices={indices}".format(
+                    reflector=reflector_name,
+                    removed=int(outlier_filter_info.get("removed_points", 0)),
+                    total=int(outlier_filter_info.get("total_points", 0)),
+                    indices=outlier_filter_info.get("removed_freq_indices", []),
+                )
+            )
+        if int(gap_alignment_info.get("adjusted_segment_count", 0)) > 0:
+            print(
+                "multi_pre_cancel_gap_alignment: reflector={reflector}, adjusted_segments={adjusted}/{segments}, reference_distance_m={distance:.3f}".format(
+                    reflector=reflector_name,
+                    adjusted=int(gap_alignment_info.get("adjusted_segment_count", 0)),
+                    segments=int(gap_alignment_info.get("segment_count", 0)),
+                    distance=float(gap_alignment_info.get("reference_distance_m") or 0.0),
+                )
+            )
+        print_distance_summary(reflector_result, disabled=bool(args.no_distance_estimates))
+
+    return result
+
+
 def print_final_distance_summary(
     results: list[dict[str, Any]],
     *,
     disabled: bool,
-    pre_cancel_result: dict[str, Any] | None = None,
+    pre_cancel_result: dict[str, Any] | list[dict[str, Any]] | None = None,
 ) -> None:
-    """在终端最后统一打印所有 capture_group 的测距结果摘要。"""
+    """在终端最后统一打印最终相对测距结果摘要。"""
     print("final_distance_summary_begin")
     if disabled:
         print("final_distance_summary: disabled_by_no_distance_estimates")
         print("final_distance_summary_end")
         return
-    if not results:
+    if pre_cancel_result is None:
         print("final_distance_summary: unavailable")
         print("final_distance_summary_end")
         return
 
-    for item in results:
-        group = str(item.get("capture_group", "unknown"))
-        print(_distance_summary_line(group, item.get("distance_estimates")))
-    if pre_cancel_result is not None:
-        print(
-            _distance_summary_line(
-                str(pre_cancel_result.get("capture_group", "measurement_minus_calibration_pre_cancel")),
-                pre_cancel_result.get("distance_estimates"),
+    if isinstance(pre_cancel_result, list):
+        for item in pre_cancel_result:
+            reflectors = item.get("reflectors")
+            if isinstance(reflectors, dict):
+                for reflector_name, reflector_result in sorted(reflectors.items()):
+                    if not isinstance(reflector_result, dict):
+                        continue
+                    print(
+                        _distance_summary_line(
+                            f"{item.get('capture_group', 'measurement_minus_calibration_pre_cancel')}/{reflector_name}",
+                            reflector_result.get("distance_estimates"),
+                        )
+                    )
+            else:
+                print(
+                    _distance_summary_line(
+                        str(item.get("capture_group", "measurement_minus_calibration_pre_cancel")),
+                        item.get("distance_estimates"),
+                    )
+                )
+        print("final_distance_summary_end")
+        return
+
+    reflectors = pre_cancel_result.get("reflectors")
+    if isinstance(reflectors, dict):
+        for reflector_name, reflector_result in sorted(reflectors.items()):
+            if not isinstance(reflector_result, dict):
+                continue
+            print(
+                _distance_summary_line(
+                    f"{pre_cancel_result.get('capture_group', 'measurement_minus_calibration_pre_cancel')}/{reflector_name}",
+                    reflector_result.get("distance_estimates"),
+                )
             )
+        print("final_distance_summary_end")
+        return
+
+    print(
+        _distance_summary_line(
+            str(pre_cancel_result.get("capture_group", "measurement_minus_calibration_pre_cancel")),
+            pre_cancel_result.get("distance_estimates"),
         )
+    )
     print("final_distance_summary_end")
 
 
@@ -1759,7 +2558,6 @@ def run_capture_analysis(
     args: argparse.Namespace,
     root: Path,
     capture_group: str,
-    capture_distance_m: Any,
     reflector_file: Path,
     initiator_file: Path,
     save_plot_dir: Path,
@@ -1785,25 +2583,10 @@ def run_capture_analysis(
     result = {
         "root": str(root),
         "capture_group": str(capture_group),
-        "capture_distance_m": capture_distance_m,
         "config_path": args.loaded_config,
         "reflector_file": str(reflector_file),
         "initiator_file": str(initiator_file),
-        "analysis_parameters": {
-            "center_freq_hz": float(args.center_freq_hz),
-            "start_offset_hz": float(args.start_offset_hz),
-            "stop_offset_hz": float(args.stop_offset_hz),
-            "step_hz": float(args.step_hz),
-            "repeats": int(args.repeats),
-            "sample_rate": float(args.sample_rate),
-            "smooth_len": int(args.smooth_len),
-            "threshold_ratio": float(args.threshold_ratio),
-            "gap_tolerance": int(args.gap_tolerance),
-            "min_segment_len": int(args.min_segment_len),
-            "edge_trim_samples": int(args.edge_trim_samples),
-            "jobs": int(args.jobs),
-            "no_burst_plots": bool(args.no_burst_plots),
-        },
+        "analysis_parameters": _analysis_parameters(args),
         "expected_burst_count": int(expected_bursts),
         "reflector": analyze_one_capture("reflector", reflector_file, run_args),
         "initiator": analyze_one_capture("initiator", initiator_file, run_args),
@@ -1847,18 +2630,7 @@ def run_capture_analysis(
     result["reflector_freq_diagnostics"] = reflector_diag
     result["pair_freq_diagnostics"] = pair_diag
 
-    if not args.no_distance_estimates:
-        add_distance_estimates(
-            result,
-            run_args,
-            pair_phase_rows,
-            result["initiator"]["rows"],
-            result["reflector"]["rows"],
-            pair_phase_rows_for_plot=pair_phase_rows,
-        )
-
     print(f"capture_group: {capture_group}")
-    print(f"capture_distance_m: {capture_distance_m}")
     print(f"reflector_file: {reflector_file}")
     print(f"initiator_file: {initiator_file}")
     for row in pair_diag:
@@ -1883,7 +2655,6 @@ def run_capture_analysis(
     print(f"saved_pair_phase_plot: {pair_phase_plot_path}")
     print(f"saved_pair_phase_csv: {pair_phase_csv_path}")
     print(f"saved_pair_angle_csv: {pair_angle_csv_path}")
-    print_distance_summary(result, disabled=bool(args.no_distance_estimates))
 
     if run_args.save_json is not None:
         out_path = run_args.save_json.resolve()
@@ -1905,6 +2676,7 @@ def main() -> None:
     if int(args.jobs) <= 0:
         args.jobs = max(1, os.cpu_count() or 1)
     root = resolve_root(args.root)
+    args.mode = infer_capture_mode(root, config, str(args.mode))
 
     base_plot_dir = args.save_plot_dir.resolve() if args.save_plot_dir is not None else default_plot_dir(root)
     explicit_files = args.reflector_file is not None or args.initiator_file is not None
@@ -1928,7 +2700,12 @@ def main() -> None:
             }
         )
     else:
-        groups = capture_group_specs(config)
+        groups = capture_group_specs(config, root, str(args.mode))
+        groups = expand_measurement_groups(
+            groups,
+            enabled=bool(args.all_measurement_groups),
+            total_measurement_groups=int(args.measurement_group_count),
+        )
         selected_label = str(args.capture_group)
         if selected_label != "all":
             groups = [group for group in groups if str(group["label"]) == selected_label]
@@ -1942,7 +2719,6 @@ def main() -> None:
                 {
                     "label": label,
                     "distance_m": group.get("distance_m"),
-                    "reflector_file": resolve_group_file(root, group["reflector_file"]),
                     "initiator_file": resolve_group_file(root, group["initiator_file"]),
                     "plot_dir": base_plot_dir / label,
                     "save_pair_csv": args.save_pair_csv if single_config_group else None,
@@ -1950,38 +2726,88 @@ def main() -> None:
                     "save_json": args.save_json if single_config_group else None,
                 }
             )
+            if "reflector_files" in group:
+                run_specs[-1]["reflector_files"] = {
+                    name: resolve_group_file(root, path)
+                    for name, path in dict(group["reflector_files"]).items()
+                }
+            else:
+                run_specs[-1]["reflector_file"] = resolve_group_file(root, group["reflector_file"])
+
+    if bool(args.all_measurement_groups) and not explicit_files and str(args.capture_group) == "all":
+        run_specs = skip_missing_measurement_run_specs(run_specs)
 
     all_results: list[dict[str, Any]] = []
     for spec in run_specs:
-        all_results.append(
-            run_capture_analysis(
-                args=args,
-                root=root,
-                capture_group=spec["label"],
-                capture_distance_m=spec["distance_m"],
-                reflector_file=spec["reflector_file"],
-                initiator_file=spec["initiator_file"],
-                save_plot_dir=spec["plot_dir"],
-                save_pair_csv_path=spec["save_pair_csv"],
-                save_pair_angle_csv_path=spec["save_pair_angle_csv"],
-                save_json=spec["save_json"],
+        if "reflector_files" in spec:
+            all_results.append(
+                run_multi_capture_analysis(
+                    args=args,
+                    root=root,
+                    capture_group=spec["label"],
+                    initiator_file=spec["initiator_file"],
+                    reflector_files=spec["reflector_files"],
+                    save_plot_dir=spec["plot_dir"],
+                    save_json=spec["save_json"],
+                )
             )
-        )
+        else:
+            all_results.append(
+                run_capture_analysis(
+                    args=args,
+                    root=root,
+                    capture_group=spec["label"],
+                    reflector_file=spec["reflector_file"],
+                    initiator_file=spec["initiator_file"],
+                    save_plot_dir=spec["plot_dir"],
+                    save_pair_csv_path=spec["save_pair_csv"],
+                    save_pair_angle_csv_path=spec["save_pair_angle_csv"],
+                    save_json=spec["save_json"],
+                )
+            )
 
-    pre_cancel_result: dict[str, Any] | None = None
+    pre_cancel_result: dict[str, Any] | list[dict[str, Any]] | None = None
     if not explicit_files:
-        pre_cancel_result = run_pre_cancel_distance_analysis(
-            args=args,
-            all_results=all_results,
-            base_plot_dir=base_plot_dir,
-        )
+        calibration_result = _pick_group_result_for_pre_cancel(all_results, role="calibration")
+        measurement_results = [
+            item
+            for item in all_results
+            if str(item.get("capture_group", "")).lower().startswith("measurement")
+        ]
+        if not bool(args.all_measurement_groups):
+            picked_measurement = _pick_group_result_for_pre_cancel(all_results, role="measurement")
+            measurement_results = [picked_measurement] if picked_measurement is not None else []
+
+        pre_cancel_results: list[dict[str, Any]] = []
+        for measurement_result in measurement_results:
+            if str(args.mode) == "1to2" or any(isinstance(item.get("reflectors"), dict) for item in all_results):
+                item_result = run_multi_pre_cancel_distance_analysis(
+                    args=args,
+                    all_results=all_results,
+                    base_plot_dir=base_plot_dir,
+                    calibration_result=calibration_result,
+                    measurement_result=measurement_result,
+                )
+            else:
+                item_result = run_pre_cancel_distance_analysis(
+                    args=args,
+                    all_results=all_results,
+                    base_plot_dir=base_plot_dir,
+                    calibration_result=calibration_result,
+                    measurement_result=measurement_result,
+                )
+            if item_result is not None:
+                pre_cancel_results.append(item_result)
+        if pre_cancel_results:
+            pre_cancel_result = pre_cancel_results if len(pre_cancel_results) > 1 else pre_cancel_results[0]
 
     if not explicit_files and args.save_json is not None and len(run_specs) > 1:
         out_path = args.save_json.resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         combined_result: dict[str, Any] = {"root": str(root), "results": all_results}
         if pre_cancel_result is not None:
-            combined_result["pre_cancel_result"] = pre_cancel_result
+            key = "pre_cancel_results" if isinstance(pre_cancel_result, list) else "pre_cancel_result"
+            combined_result[key] = pre_cancel_result
         out_path.write_text(json.dumps(combined_result, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"saved_json: {out_path}")
 

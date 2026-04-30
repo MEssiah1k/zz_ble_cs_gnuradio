@@ -33,47 +33,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = PROJECT_ROOT / "1to1_rfhop"
 DEFAULT_PLOT_DIR = PROJECT_ROOT / "output_estimate_plot_continuous_phase_match"
 DEFAULT_PROPAGATION_SPEED_MPS = 2.3e8
-TWO_PI = 2.0 * np.pi
 
 
 def wrap_to_pi(x: np.ndarray | float) -> np.ndarray | float:
     return (np.asarray(x) + np.pi) % (2.0 * np.pi) - np.pi
-
-
-def unwrap_with_negative_slope_prior(
-    phases_wrapped: np.ndarray,
-    *,
-    upward_tolerance_rad: float = 0.8,
-) -> np.ndarray:
-    phases = np.asarray(phases_wrapped, dtype=float)
-    if phases.size <= 1:
-        return phases.copy()
-
-    unwrapped = np.empty_like(phases)
-    unwrapped[0] = phases[0]
-    for idx in range(1, phases.size):
-        value = float(phases[idx])
-        prev = float(unwrapped[idx - 1])
-        while (value - prev) > float(upward_tolerance_rad) and (value - prev) > np.pi:
-            value -= TWO_PI
-        unwrapped[idx] = value
-    return unwrapped
-
-
-def slope_distance_from_wrapped_phase(
-    freqs_hz: np.ndarray,
-    measured_wrapped: np.ndarray,
-    *,
-    upward_tolerance_rad: float,
-    propagation_speed_mps: float,
-) -> tuple[float, float, float, np.ndarray]:
-    measured_unwrapped = unwrap_with_negative_slope_prior(
-        measured_wrapped,
-        upward_tolerance_rad=upward_tolerance_rad,
-    )
-    slope, intercept = np.polyfit(freqs_hz, measured_unwrapped, 1)
-    slope_distance_m = -float(propagation_speed_mps) * float(slope) / (4.0 * np.pi)
-    return float(slope_distance_m), float(slope), float(intercept), measured_unwrapped
 
 
 def default_plot_path(root: Path) -> Path:
@@ -111,39 +74,155 @@ def solve_phase_offset(measured_wrapped: np.ndarray, model_phase: np.ndarray) ->
     return phase0, np.asarray(wrapped_error, dtype=float)
 
 
+def _split_stable_phase_segments(
+    rows: list[dict[str, Any]],
+    *,
+    max_wrapped_step_rad_per_bin: float = 0.6,
+) -> list[list[dict[str, Any]]]:
+    if not rows:
+        return []
+    segments: list[list[dict[str, Any]]] = [[rows[0]]]
+    for row in rows[1:]:
+        prev_row = segments[-1][-1]
+        prev_index = int(prev_row["freq_index"])
+        curr_index = int(row["freq_index"])
+        index_step = max(1, curr_index - prev_index)
+        phase_step = float(wrap_to_pi(float(row["pair_phase_rad"]) - float(prev_row["pair_phase_rad"]))) / float(index_step)
+        if curr_index == prev_index + 1 and abs(phase_step) <= float(max_wrapped_step_rad_per_bin):
+            segments[-1].append(row)
+        else:
+            segments.append([row])
+    return segments
+
+
+def _stitch_match_rows(
+    rows: list[dict[str, Any]],
+    *,
+    distance_min_m: float,
+    distance_max_m: float,
+    distance_step_m: float,
+    propagation_speed_mps: float,
+    min_segment_points: int = 8,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    segments = _split_stable_phase_segments(rows)
+    info: dict[str, Any] = {
+        "method": "stable_segment_intercept_stitch",
+        "segment_count": int(len(segments)),
+        "reference_segment_index": 0,
+        "stitched_points": int(len(rows)),
+        "segment_offsets_rad": [],
+        "reason": "single_segment",
+    }
+    if len(segments) <= 1:
+        return rows, info
+
+    usable = [(idx, segment) for idx, segment in enumerate(segments) if len(segment) >= int(min_segment_points)]
+    if not usable:
+        info.update(
+            {
+                "reference_segment_index": None,
+                "stitched_points": int(len(rows)),
+                "reason": "no_segment_long_enough",
+            }
+        )
+        return rows, info
+
+    reference_index, reference_rows = usable[0]
+    distances_m = np.arange(float(distance_min_m), float(distance_max_m) + 0.5 * float(distance_step_m), float(distance_step_m))
+    ref_freqs = np.array([float(row["freq_hz"]) for row in reference_rows], dtype=float)
+    ref_phases = np.array([float(row["pair_phase_rad"]) for row in reference_rows], dtype=float)
+    best_cost = float("inf")
+    reference_distance_m = float(distances_m[0])
+    reference_phase0 = 0.0
+    for distance_m in distances_m:
+        model = -4.0 * np.pi * ref_freqs * float(distance_m) / float(propagation_speed_mps)
+        phase0, residual = solve_phase_offset(ref_phases, model)
+        cost = float(np.mean(residual * residual))
+        if cost < best_cost:
+            best_cost = cost
+            reference_distance_m = float(distance_m)
+            reference_phase0 = float(phase0)
+
+    stitched_rows: list[dict[str, Any]] = []
+    segment_offsets: list[dict[str, Any]] = []
+    for segment_index, segment in enumerate(segments):
+        freqs = np.array([float(row["freq_hz"]) for row in segment], dtype=float)
+        phases = np.array([float(row["pair_phase_rad"]) for row in segment], dtype=float)
+        model = -4.0 * np.pi * freqs * reference_distance_m / float(propagation_speed_mps)
+        phase0, residual = solve_phase_offset(phases, model)
+        offset_delta = float(wrap_to_pi(phase0 - reference_phase0))
+        adjust = segment_index != reference_index
+        segment_offsets.append(
+            {
+                "segment_index": int(segment_index),
+                "start_freq_index": int(segment[0]["freq_index"]),
+                "stop_freq_index": int(segment[-1]["freq_index"]),
+                "point_count": int(len(segment)),
+                "phase0_rad": float(phase0),
+                "offset_delta_rad": float(offset_delta if adjust else 0.0),
+                "adjusted": bool(adjust),
+                "rms_residual_rad": float(np.sqrt(np.mean(residual * residual))) if residual.size else None,
+            }
+        )
+        for row in segment:
+            tagged = dict(row)
+            tagged["match_stitch_segment_index"] = int(segment_index)
+            tagged["match_stitch_offset_delta_rad"] = float(offset_delta if adjust else 0.0)
+            if adjust:
+                tagged["pair_phase_rad"] = float(wrap_to_pi(float(row["pair_phase_rad"]) - offset_delta))
+            stitched_rows.append(tagged)
+
+    info.update(
+        {
+            "reference_segment_index": int(reference_index),
+            "reference_start_freq_index": int(reference_rows[0]["freq_index"]),
+            "reference_stop_freq_index": int(reference_rows[-1]["freq_index"]),
+            "reference_distance_m": float(reference_distance_m),
+            "reference_phase0_rad": float(reference_phase0),
+            "reference_cost": float(best_cost),
+            "stitched_points": int(len(stitched_rows)),
+            "segment_offsets_rad": segment_offsets,
+            "reason": "segments_stitched_by_intercept",
+        }
+    )
+    return stitched_rows, info
+
+
 def estimate_distance_phase_match_from_pair_rows(
     pair_rows: list[dict[str, Any]],
     args: argparse.Namespace,
     *,
     source: str,
 ) -> dict[str, Any]:
-    usable_pair_rows = sorted(pair_rows, key=lambda item: int(item["freq_index"]))
+    all_pair_rows = sorted(pair_rows, key=lambda item: int(item["freq_index"]))
+    if len(all_pair_rows) < 2:
+        raise SystemExit("有效公共频点少于 2 个，无法做相位匹配测距")
+
+    distance_step_m = float(args.distance_step_m)
+    if distance_step_m <= 0.0:
+        raise SystemExit("distance_step_m 必须大于 0")
+    propagation_speed_mps = float(getattr(args, "propagation_speed_mps", DEFAULT_PROPAGATION_SPEED_MPS))
+    distance_min_m = float(args.distance_min_m)
+    distance_max_m = float(args.distance_max_m)
+    if distance_max_m < distance_min_m:
+        raise SystemExit("distance_max_m 必须大于等于 distance_min_m")
+    num_steps = int(round((distance_max_m - distance_min_m) / distance_step_m)) + 1
+    distance_grid = distance_min_m + np.arange(num_steps, dtype=float) * distance_step_m
+    if distance_grid.size == 0:
+        raise SystemExit("distance grid is empty")
+
+    usable_pair_rows, match_selection = _stitch_match_rows(
+        all_pair_rows,
+        distance_min_m=distance_min_m,
+        distance_max_m=distance_max_m,
+        distance_step_m=distance_step_m,
+        propagation_speed_mps=propagation_speed_mps,
+    )
     if len(usable_pair_rows) < 2:
         raise SystemExit("有效公共频点少于 2 个，无法做相位匹配测距")
 
     freqs_hz = np.array([float(row["freq_hz"]) for row in usable_pair_rows], dtype=float)
     measured_wrapped = np.array([float(row["pair_phase_rad"]) for row in usable_pair_rows], dtype=float)
-
-    distance_step_m = float(args.distance_step_m)
-    if distance_step_m <= 0.0:
-        raise SystemExit("distance_step_m 必须大于 0")
-    match_window_m = float(getattr(args, "match_window_m", 10.0))
-    if match_window_m < 0.0:
-        raise SystemExit("match_window_m 不能为负数")
-    unwrap_upward_tolerance_rad = float(getattr(args, "unwrap_upward_tolerance_rad", 0.8))
-    propagation_speed_mps = float(getattr(args, "propagation_speed_mps", DEFAULT_PROPAGATION_SPEED_MPS))
-    slope_distance_m, slope_rad_per_hz, slope_intercept_rad, measured_unwrapped = slope_distance_from_wrapped_phase(
-        freqs_hz,
-        measured_wrapped,
-        upward_tolerance_rad=unwrap_upward_tolerance_rad,
-        propagation_speed_mps=propagation_speed_mps,
-    )
-    distance_min_m = slope_distance_m - match_window_m
-    distance_max_m = slope_distance_m + match_window_m
-    num_steps = int(round((distance_max_m - distance_min_m) / distance_step_m)) + 1
-    distance_grid = distance_min_m + np.arange(num_steps, dtype=float) * distance_step_m
-    if distance_grid.size == 0:
-        raise SystemExit("distance grid is empty")
 
     costs = np.empty(distance_grid.size, dtype=float)
     phase0_values = np.empty(distance_grid.size, dtype=float)
@@ -159,6 +238,18 @@ def estimate_distance_phase_match_from_pair_rows(
     if abs(best_distance_m) < 0.5 * args.distance_step_m:
         best_distance_m = 0.0
     best_phase0 = float(phase0_values[best_index])
+
+    exclude_radius = max(0.25, 2.0 * distance_step_m)
+    second_costs = costs.copy()
+    second_costs[np.abs(distance_grid - best_distance_m) <= exclude_radius] = np.inf
+    second_best_index = int(np.argmin(second_costs))
+    second_best_distance_m = float(distance_grid[second_best_index])
+    second_best_cost = float(costs[second_best_index])
+    best_cost = float(costs[best_index])
+    cost_margin = float(second_best_cost - best_cost)
+    cost_ratio = float(second_best_cost / (best_cost + 1e-12))
+    confidence = float(cost_margin / (best_cost + 1e-12))
+
     best_model_phase = -4.0 * np.pi * freqs_hz * best_distance_m / propagation_speed_mps
     best_wrapped_fit = wrap_to_pi(best_model_phase + best_phase0)
     best_wrapped_error = np.asarray(wrap_to_pi(measured_wrapped - best_wrapped_fit), dtype=float)
@@ -184,24 +275,32 @@ def estimate_distance_phase_match_from_pair_rows(
         "initiator_file": None,
         "reflector_invalid_burst_count": 0,
         "initiator_invalid_burst_count": 0,
-        "valid_freq_count": int(len(rows)),
+        "valid_freq_count": int(len(all_pair_rows)),
+        "match_point_count": int(len(rows)),
         "distance_m": best_distance_m,
-        "slope_distance_m": float(slope_distance_m),
+        "slope_distance_m": None,
         "propagation_speed_mps": float(propagation_speed_mps),
-        "slope_rad_per_hz": float(slope_rad_per_hz),
-        "slope_intercept_rad": float(slope_intercept_rad),
-        "match_window_m": float(match_window_m),
+        "slope_rad_per_hz": None,
+        "slope_intercept_rad": None,
+        "matching_method": "stitched_segment_wrapped_phase_spectrum",
+        "match_selection": match_selection,
+        "match_window_m": None,
         "match_distance_min_m": float(distance_grid[0]),
         "match_distance_max_m": float(distance_grid[-1]),
-        "unwrap_upward_tolerance_rad": float(unwrap_upward_tolerance_rad),
         "phase0_rad": best_phase0,
-        "wrapped_phase_cost": float(costs[best_index]),
+        "wrapped_phase_cost": best_cost,
         "wrapped_phase_rms_error": float(np.sqrt(np.mean(best_wrapped_error ** 2))),
         "wrapped_phase_max_abs_error": float(np.max(np.abs(best_wrapped_error))),
+        "second_best_distance_m": second_best_distance_m,
+        "second_best_wrapped_phase_cost": second_best_cost,
+        "cost_margin": cost_margin,
+        "cost_ratio": cost_ratio,
+        "confidence": confidence,
         "distance_grid_m": [float(x) for x in distance_grid],
         "cost_grid": [float(x) for x in costs],
-        "measured_unwrapped_by_slope_prior": [float(x) for x in measured_unwrapped],
         "rows": rows,
+        "all_freq_indices": [int(row["freq_index"]) for row in all_pair_rows],
+        "fit_freq_indices": [int(row["freq_index"]) for row in usable_pair_rows],
     }
 
 
@@ -276,8 +375,6 @@ def save_phase_match_plot(result: dict[str, Any], save_path: Path) -> None:
     fitted = np.array([float(row["phase_wrapped_fit"]) for row in rows], dtype=float)
     error = np.array([float(row["phase_wrapped_error"]) for row in rows], dtype=float)
     used_for_fit = np.array([bool(row.get("used_for_fit", True)) for row in rows], dtype=bool)
-    fitted_unwrapped = np.unwrap(fitted)
-    measured_unwrapped = fitted_unwrapped + error
     distance_grid = np.array(result["distance_grid_m"], dtype=float)
     cost_grid = np.array(result["cost_grid"], dtype=float)
 
@@ -289,20 +386,24 @@ def save_phase_match_plot(result: dict[str, Any], save_path: Path) -> None:
     axes[0].set_title("Wrapped phase distance matching cost")
     axes[0].grid(True, alpha=0.3)
 
-    axes[1].plot(freq_mhz[used_for_fit], measured_unwrapped[used_for_fit], "o-", linewidth=1.2, markersize=4, label="measured (used)")
+    axes[1].plot(freq_mhz[used_for_fit], measured[used_for_fit], "o", markersize=4, label="measured (used)")
     if np.any(~used_for_fit):
         axes[1].plot(
             freq_mhz[~used_for_fit],
-            measured_unwrapped[~used_for_fit],
-            "o-",
-            linewidth=1.2,
+            measured[~used_for_fit],
+            "o",
             markersize=4,
             label="measured (excluded)",
             color="tab:gray",
             alpha=0.9,
         )
-    axes[1].plot(freq_mhz[used_for_fit], fitted_unwrapped[used_for_fit], "o-", linewidth=1.2, markersize=4, label="model fit")
-    axes[1].set_ylabel("Unwrapped Phase (rad)")
+    axes[1].plot(freq_mhz[used_for_fit], fitted[used_for_fit], "o", markersize=4, label="wrapped model fit")
+    axes[1].axhline(-np.pi, color="black", linewidth=0.8, linestyle="--", alpha=0.35)
+    axes[1].axhline(0.0, color="black", linewidth=0.8, alpha=0.25)
+    axes[1].axhline(np.pi, color="black", linewidth=0.8, linestyle="--", alpha=0.35)
+    axes[1].set_ylim(-np.pi - 0.2, np.pi + 0.2)
+    axes[1].set_ylabel("Wrapped Phase (rad)")
+    axes[1].set_title("Wrapped phase samples (no unwrap)")
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
 
@@ -350,12 +451,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threshold-ratio", type=float, default=0.35)
     parser.add_argument("--gap-tolerance", type=int, default=48)
     parser.add_argument("--min-segment-len", type=int, default=64)
-    parser.add_argument("--distance-min-m", type=float, default=0.0, help="兼容旧命令，当前 phase-match 不再用绝对距离下限")
-    parser.add_argument("--distance-max-m", type=float, default=20.0, help="兼容旧命令，当前 phase-match 不再用绝对距离上限")
+    parser.add_argument("--distance-min-m", type=float, default=0.0, help="全局 spectrum matching 距离搜索下限")
+    parser.add_argument("--distance-max-m", type=float, default=30.0, help="全局 spectrum matching 距离搜索上限")
     parser.add_argument("--distance-step-m", type=float, default=0.01)
-    parser.add_argument("--match-window-m", type=float, default=10.0, help="围绕线性斜率距离做 phase-match 的半窗口，默认 slope_distance ±10m")
+    parser.add_argument("--match-window-m", type=float, default=10.0, help="兼容旧命令；当前全局 spectrum matching 不使用该参数")
     parser.add_argument("--propagation-speed-mps", type=float, default=DEFAULT_PROPAGATION_SPEED_MPS, help="传播速度，默认 2.3e8 m/s（铜质有线测量）")
-    parser.add_argument("--unwrap-upward-tolerance-rad", type=float, default=0.8)
     parser.add_argument("--save-json", type=Path, default=None)
     parser.add_argument("--save-plot", type=Path, default=None)
     parser.add_argument("--no-save-plot", action="store_true")

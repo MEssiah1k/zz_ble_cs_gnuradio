@@ -4,7 +4,7 @@ category: '[usrp_ble]'
 
 templates:
   imports: from gnuradio import usrp_ble
-  make: usrp_ble.capture_gate(${num_channels}, ${group_index})
+  make: usrp_ble.capture_gate(${num_channels}, ${group_index}, ${output_groups})
   callbacks:
   - set_group_index(${group_index})
 
@@ -14,9 +14,14 @@ parameters:
   dtype: int
   default: '1'
 - id: group_index
-  label: Group Index
+  label: Legacy Group Index
   dtype: int
   default: '0'
+  hide: ${ 'all' if output_groups > 1 else 'none' }
+- id: output_groups
+  label: Output Groups
+  dtype: int
+  default: '1'
 
 inputs:
 - label: in0
@@ -39,6 +44,86 @@ outputs:
   domain: stream
   dtype: complex
   optional: true
-  hide: ${ num_channels <= 1 }
+  hide: ${ num_channels * output_groups <= 1 }
+- label: out2
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 2 }
+- label: out3
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 3 }
+- label: out4
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 4 }
+- label: out5
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 5 }
+- label: out6
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 6 }
+- label: out7
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 7 }
+- label: out8
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 8 }
+- label: out9
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 9 }
+- label: out10
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 10 }
+- label: out11
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 11 }
+- label: out12
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 12 }
+- label: out13
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 13 }
+- label: out14
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 14 }
+- label: out15
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 15 }
+- label: out16
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 16 }
+- label: out17
+  domain: stream
+  dtype: complex
+  optional: true
+  hide: ${ num_channels * output_groups <= 17 }
 
 file_format: 1

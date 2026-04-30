@@ -17,17 +17,22 @@ namespace usrp_ble {
 
 using sample_type = gr_complex;
 
-capture_gate::sptr capture_gate::make(int num_channels, int group_index)
+capture_gate::sptr capture_gate::make(int num_channels, int group_index, int output_groups)
 {
-    return gnuradio::make_block_sptr<capture_gate_impl>(std::max(1, num_channels), std::max(0, group_index));
+    return gnuradio::make_block_sptr<capture_gate_impl>(
+        std::max(1, num_channels), std::max(0, group_index), std::max(1, output_groups));
 }
 
-capture_gate_impl::capture_gate_impl(int num_channels, int group_index)
+capture_gate_impl::capture_gate_impl(int num_channels, int group_index, int output_groups)
     : gr::block("capture_gate",
                 gr::io_signature::make(num_channels, num_channels, sizeof(sample_type)),
-                gr::io_signature::make(num_channels, num_channels, sizeof(sample_type))),
+                gr::io_signature::make(num_channels * std::max(1, output_groups),
+                                       num_channels * std::max(1, output_groups),
+                                       sizeof(sample_type))),
       d_num_channels(std::max(1, num_channels)),
       d_group_index(std::max(0, group_index)),
+      d_output_groups(std::max(1, output_groups)),
+      d_active_group_index(std::max(0, group_index)),
       d_active(false)
 {
     message_port_register_in(pmt::mp("command"));
@@ -41,6 +46,19 @@ void capture_gate_impl::set_group_index(int group_index)
 {
     std::lock_guard<std::mutex> lock(d_mutex);
     d_group_index = std::max(0, group_index);
+    if (!routed_mode()) {
+        d_active_group_index = d_group_index;
+    }
+}
+
+bool capture_gate_impl::routed_mode() const
+{
+    return d_output_groups > 1;
+}
+
+int capture_gate_impl::output_port_index(int channel, int group_index) const
+{
+    return group_index * d_num_channels + channel;
 }
 
 void capture_gate_impl::handle_msg(pmt::pmt_t msg)
@@ -73,13 +91,27 @@ void capture_gate_impl::handle_msg(pmt::pmt_t msg)
     }
 
     std::lock_guard<std::mutex> lock(d_mutex);
-    if (has_group_index && group_index != d_group_index) {
-        return;
-    }
     if (cmd == "capture_start") {
-        d_active = true;
+        const int requested_group = has_group_index ? std::max(0L, group_index) : d_group_index;
+        if (routed_mode()) {
+            if (requested_group >= d_output_groups) {
+                d_active = false;
+                return;
+            }
+            d_active_group_index = requested_group;
+            d_active = true;
+        } else {
+            if (has_group_index && requested_group != d_group_index) {
+                return;
+            }
+            d_active_group_index = d_group_index;
+            d_active = true;
+        }
     } else if (cmd == "capture_stop") {
-        d_active = false;
+        const int requested_group = has_group_index ? std::max(0L, group_index) : d_active_group_index;
+        if (!routed_mode() || !has_group_index || requested_group == d_active_group_index) {
+            d_active = false;
+        }
     }
 }
 
@@ -99,9 +131,11 @@ int capture_gate_impl::general_work(int noutput_items,
     }
 
     bool active = false;
+    int active_group_index = 0;
     {
         std::lock_guard<std::mutex> lock(d_mutex);
         active = d_active;
+        active_group_index = d_active_group_index;
     }
 
     if (!active) {
@@ -112,12 +146,14 @@ int capture_gate_impl::general_work(int noutput_items,
     const int nproduce = std::min(noutput_items, available);
     for (int ch = 0; ch < d_num_channels; ++ch) {
         const auto* in = static_cast<const sample_type*>(input_items[ch]);
-        auto* out = static_cast<sample_type*>(output_items[ch]);
+        const int out_index = output_port_index(ch, routed_mode() ? active_group_index : 0);
+        auto* out = static_cast<sample_type*>(output_items[out_index]);
         std::memcpy(out, in, nproduce * sizeof(sample_type));
+        produce(out_index, nproduce);
     }
 
     consume_each(nproduce);
-    return nproduce;
+    return WORK_CALLED_PRODUCE;
 }
 
 } // namespace usrp_ble

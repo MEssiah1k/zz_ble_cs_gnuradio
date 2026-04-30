@@ -37,6 +37,10 @@ DEFAULT_PROPAGATION_SPEED_MPS = 2.3e8
 TWO_PI = 2.0 * np.pi
 
 
+def wrap_to_pi(x: np.ndarray | float) -> np.ndarray | float:
+    return (np.asarray(x) + np.pi) % TWO_PI - np.pi
+
+
 def unwrap_with_negative_slope_prior(
     phases_wrapped: np.ndarray,
     *,
@@ -63,6 +67,155 @@ def unwrap_with_negative_slope_prior(
             value -= TWO_PI
         unwrapped[idx] = value
     return unwrapped
+
+
+def unwrap_with_frequency_gap_prediction(
+    phases_wrapped: np.ndarray,
+    freq_indices: np.ndarray,
+    *,
+    upward_tolerance_rad: float = 0.8,
+) -> np.ndarray:
+    """Unwrap with prediction across missing frequency bins.
+
+    The ordinary adjacent unwrap assumes neighboring samples are consecutive.
+    If a frequency bin disappears, the next observed point may need to be
+    shifted by 2pi to stay on the same slope branch.
+    """
+    phases = np.asarray(phases_wrapped, dtype=float)
+    indices = np.asarray(freq_indices, dtype=float)
+    if phases.size <= 1:
+        return phases.copy()
+
+    unwrapped = np.empty_like(phases)
+    unwrapped[0] = phases[0]
+    slopes: list[float] = []
+    for idx in range(1, phases.size):
+        step = max(1.0, float(indices[idx] - indices[idx - 1]))
+        if slopes:
+            slope_per_bin = float(np.median(slopes[-min(8, len(slopes)):]))
+            predicted = float(unwrapped[idx - 1]) + slope_per_bin * step
+        else:
+            predicted = float(unwrapped[idx - 1])
+
+        value = float(phases[idx])
+        candidates = value + TWO_PI * np.arange(-4, 5, dtype=float)
+        best = float(candidates[int(np.argmin(np.abs(candidates - predicted)))])
+
+        if not slopes and (best - float(unwrapped[idx - 1])) > float(upward_tolerance_rad) and (best - float(unwrapped[idx - 1])) > np.pi:
+            best -= TWO_PI
+
+        unwrapped[idx] = best
+        slopes.append((float(unwrapped[idx]) - float(unwrapped[idx - 1])) / step)
+    return unwrapped
+
+
+def unwrap_wrapped_to_fit_line(phases_wrapped: np.ndarray, fitted_phase: np.ndarray) -> np.ndarray:
+    """Choose the 2pi branch closest to an already fitted phase line."""
+    phases = np.asarray(phases_wrapped, dtype=float)
+    fitted = np.asarray(fitted_phase, dtype=float)
+    if phases.shape != fitted.shape:
+        raise ValueError("phases_wrapped and fitted_phase must have the same shape")
+    branch = np.round((fitted - phases) / TWO_PI)
+    return phases + branch * TWO_PI
+
+
+def _split_contiguous_freq_rows(
+    rows: list[dict[str, Any]],
+    *,
+    max_wrapped_step_rad_per_bin: float = 0.6,
+) -> list[list[dict[str, Any]]]:
+    if not rows:
+        return []
+    segments: list[list[dict[str, Any]]] = [[rows[0]]]
+    for row in rows[1:]:
+        prev_row = segments[-1][-1]
+        prev_index = int(prev_row["freq_index"])
+        curr_index = int(row["freq_index"])
+        index_step = max(1, curr_index - prev_index)
+        phase_step = float(wrap_to_pi(float(row["phase_wrapped"]) - float(prev_row["phase_wrapped"]))) / float(index_step)
+        continuous = curr_index == prev_index + 1 and abs(phase_step) <= float(max_wrapped_step_rad_per_bin)
+        if continuous:
+            segments[-1].append(row)
+        else:
+            segments.append([row])
+    return segments
+
+
+def _stitch_linear_fit_rows(
+    rows: list[dict[str, Any]],
+    *,
+    min_segment_points: int = 8,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    segments = _split_contiguous_freq_rows(rows)
+    info: dict[str, Any] = {
+        "method": "stable_segment_intercept_stitch",
+        "segment_count": int(len(segments)),
+        "reference_segment_index": 0,
+        "stitched_points": int(len(rows)),
+        "segment_offsets_rad": [],
+        "reason": "single_segment",
+    }
+    if len(segments) <= 1:
+        return rows, info
+
+    usable = [(idx, segment) for idx, segment in enumerate(segments) if len(segment) >= int(min_segment_points)]
+    if not usable:
+        info.update(
+            {
+                "reference_segment_index": None,
+                "stitched_points": int(len(rows)),
+                "reason": "no_segment_long_enough",
+            }
+        )
+        return rows, info
+
+    reference_index, reference_rows = usable[0]
+    ref_freqs = np.array([float(row["freq_hz"]) for row in reference_rows], dtype=float)
+    ref_phases_wrapped = np.array([float(row["phase_wrapped"]) for row in reference_rows], dtype=float)
+    ref_indices = np.array([int(row["freq_index"]) for row in reference_rows], dtype=float)
+    ref_unwrapped = unwrap_with_frequency_gap_prediction(ref_phases_wrapped, ref_indices)
+    ref_slope, ref_intercept = np.polyfit(ref_freqs, ref_unwrapped, 1)
+
+    stitched_rows: list[dict[str, Any]] = []
+    segment_offsets: list[dict[str, Any]] = []
+    for segment_index, segment in enumerate(segments):
+        freqs = np.array([float(row["freq_hz"]) for row in segment], dtype=float)
+        phases = np.array([float(row["phase_wrapped"]) for row in segment], dtype=float)
+        model = ref_slope * freqs + ref_intercept
+        residual = wrap_to_pi(phases - model)
+        offset = float(np.angle(np.mean(np.exp(1j * residual)))) if residual.size else 0.0
+        adjust = segment_index != reference_index
+        segment_offsets.append(
+            {
+                "segment_index": int(segment_index),
+                "start_freq_index": int(segment[0]["freq_index"]),
+                "stop_freq_index": int(segment[-1]["freq_index"]),
+                "point_count": int(len(segment)),
+                "offset_delta_rad": float(offset if adjust else 0.0),
+                "adjusted": bool(adjust),
+            }
+        )
+        for row in segment:
+            tagged = dict(row)
+            tagged["linear_stitch_segment_index"] = int(segment_index)
+            tagged["linear_stitch_offset_delta_rad"] = float(offset if adjust else 0.0)
+            if adjust:
+                tagged["phase_wrapped"] = float(wrap_to_pi(float(row["phase_wrapped"]) - offset))
+            stitched_rows.append(tagged)
+
+    info.update(
+        {
+            "reference_segment_index": int(reference_index),
+            "reference_start_freq_index": int(reference_rows[0]["freq_index"]),
+            "reference_stop_freq_index": int(reference_rows[-1]["freq_index"]),
+            "reference_slope_rad_per_hz": float(ref_slope),
+            "reference_intercept_rad": float(ref_intercept),
+            "stitched_points": int(len(stitched_rows)),
+            "segment_offsets_rad": segment_offsets,
+            "reason": "segments_stitched_by_intercept",
+        }
+    )
+    return stitched_rows, info
 
 
 def save_estimate_plot(result: dict[str, Any], save_path: Path) -> None:
@@ -94,7 +247,7 @@ def save_estimate_plot(result: dict[str, Any], save_path: Path) -> None:
             color="tab:gray",
             alpha=0.9,
         )
-    axes[1].plot(fit_freqs_hz / 1e6, fit_line_y, "-", label="linear fit (front-only)", linewidth=1.5, color="tab:orange")
+    axes[1].plot(fit_freqs_hz / 1e6, fit_line_y, "-", label="linear fit", linewidth=1.5, color="tab:orange")
     axes[1].set_ylabel("Unwrapped Phase (rad)")
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
@@ -222,12 +375,15 @@ def estimate_distance_from_pair_rows(
             }
         )
 
-    freqs = np.array(freqs_hz, dtype=float)
-    phases_wrapped = np.array(pair_phase_wrapped, dtype=float)
+    fit_rows, linear_fit_selection = _stitch_linear_fit_rows(rows)
+    freqs = np.array([float(row["freq_hz"]) for row in fit_rows], dtype=float)
+    phases_wrapped = np.array([float(row["phase_wrapped"]) for row in fit_rows], dtype=float)
     phases_unwrapped_np = np.unwrap(phases_wrapped)
+    freq_indices_np = np.array([int(row["freq_index"]) for row in fit_rows], dtype=float)
     unwrap_upward_tolerance_rad = float(getattr(args, "unwrap_upward_tolerance_rad", 0.8))
-    phases_unwrapped = unwrap_with_negative_slope_prior(
+    phases_unwrapped = unwrap_with_frequency_gap_prediction(
         phases_wrapped,
+        freq_indices_np,
         upward_tolerance_rad=unwrap_upward_tolerance_rad,
     )
     slope, intercept = np.polyfit(freqs, phases_unwrapped, 1)
@@ -236,10 +392,12 @@ def estimate_distance_from_pair_rows(
     propagation_speed_mps = float(getattr(args, "propagation_speed_mps", DEFAULT_PROPAGATION_SPEED_MPS))
     distance_m = -propagation_speed_mps * float(slope) / (4.0 * np.pi)
 
-    for row, phase_unwrapped, phase_unwrapped_np, phase_residual in zip(rows, phases_unwrapped, phases_unwrapped_np, residual):
+    fit_freq_indices = {int(row["freq_index"]) for row in fit_rows}
+    for row, phase_unwrapped, phase_unwrapped_np, phase_residual in zip(fit_rows, phases_unwrapped, phases_unwrapped_np, residual):
         row["phase_unwrapped"] = float(phase_unwrapped)
         row["phase_unwrapped_np"] = float(phase_unwrapped_np)
         row["phase_residual"] = float(phase_residual)
+        row["used_for_fit"] = True
 
     return {
         "root": str(resolve_root(args.root)),
@@ -258,14 +416,18 @@ def estimate_distance_from_pair_rows(
         "reflector_invalid_burst_count": 0,
         "initiator_invalid_burst_count": 0,
         "valid_freq_count": int(len(rows)),
+        "linear_fit_point_count": int(len(fit_rows)),
         "distance_m": float(distance_m),
         "slope_rad_per_hz": float(slope),
         "intercept_rad": float(intercept),
-        "unwrap_method": "monotonic_downward_branch",
+        "unwrap_method": "frequency_gap_prediction",
+        "linear_fit_selection": linear_fit_selection,
         "unwrap_upward_tolerance_rad": float(unwrap_upward_tolerance_rad),
         "rms_phase_residual": float(np.sqrt(np.mean(residual ** 2))),
         "max_abs_phase_residual": float(np.max(np.abs(residual))),
-        "rows": rows,
+        "rows": fit_rows,
+        "all_freq_indices": [int(row["freq_index"]) for row in rows],
+        "fit_freq_indices": sorted(fit_freq_indices),
         "initiator_avg_by_freq": [],
         "reflector_avg_by_freq": [],
     }

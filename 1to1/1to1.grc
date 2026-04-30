@@ -232,7 +232,7 @@ blocks:
     bus_structure: null
     coordinate: [2064, 492.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: blocks_file_sink_0_0
   id: blocks_file_sink
   parameters:
@@ -250,7 +250,7 @@ blocks:
     bus_structure: null
     coordinate: [1984, 1172.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: blocks_file_sink_1
   id: blocks_file_sink
   parameters:
@@ -268,7 +268,7 @@ blocks:
     bus_structure: null
     coordinate: [2080, 740.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: blocks_file_sink_1_0
   id: blocks_file_sink
   parameters:
@@ -286,7 +286,7 @@ blocks:
     bus_structure: null
     coordinate: [2016, 980.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: blocks_message_debug_0
   id: blocks_message_debug
   parameters:
@@ -316,7 +316,7 @@ blocks:
     bus_structure: null
     coordinate: [1568, 680.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: blocks_multiply_conjugate_cc_0_0
   id: blocks_multiply_conjugate_cc
   parameters:
@@ -330,9 +330,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1520, 848.0]
+    coordinate: [1520, 856.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: blocks_multiply_xx_0
   id: blocks_multiply_xx
   parameters:
@@ -450,6 +450,200 @@ blocks:
     coordinate: [296, 412.0]
     rotation: 0
     state: disabled
+- name: qtgui_time_sink_x_0
+  id: qtgui_time_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'False'
+    axislabels: 'True'
+    color1: blue
+    color10: dark blue
+    color2: red
+    color3: green
+    color4: black
+    color5: cyan
+    color6: magenta
+    color7: yellow
+    color8: dark red
+    color9: dark green
+    comment: ''
+    ctrlpanel: 'False'
+    entags: 'True'
+    grid: 'False'
+    gui_hint: ''
+    label1: Signal 1
+    label10: Signal 10
+    label2: Signal 2
+    label3: Signal 3
+    label4: Signal 4
+    label5: Signal 5
+    label6: Signal 6
+    label7: Signal 7
+    label8: Signal 8
+    label9: Signal 9
+    legend: 'True'
+    marker1: '-1'
+    marker10: '-1'
+    marker2: '-1'
+    marker3: '-1'
+    marker4: '-1'
+    marker5: '-1'
+    marker6: '-1'
+    marker7: '-1'
+    marker8: '-1'
+    marker9: '-1'
+    name: '""'
+    nconnections: '1'
+    size: '1024'
+    srate: samp_rate
+    stemplot: 'False'
+    style1: '1'
+    style10: '1'
+    style2: '1'
+    style3: '1'
+    style4: '1'
+    style5: '1'
+    style6: '1'
+    style7: '1'
+    style8: '1'
+    style9: '1'
+    tr_chan: '0'
+    tr_delay: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: complex
+    update_time: '0.10'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    ylabel: Amplitude
+    ymax: '1'
+    ymin: '-1'
+    yunit: '""'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1384, 524.0]
+    rotation: 0
+    state: true
+- name: qtgui_time_sink_x_1
+  id: qtgui_time_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'False'
+    axislabels: 'True'
+    color1: blue
+    color10: dark blue
+    color2: red
+    color3: green
+    color4: black
+    color5: cyan
+    color6: magenta
+    color7: yellow
+    color8: dark red
+    color9: dark green
+    comment: ''
+    ctrlpanel: 'False'
+    entags: 'True'
+    grid: 'False'
+    gui_hint: ''
+    label1: Signal 1
+    label10: Signal 10
+    label2: Signal 2
+    label3: Signal 3
+    label4: Signal 4
+    label5: Signal 5
+    label6: Signal 6
+    label7: Signal 7
+    label8: Signal 8
+    label9: Signal 9
+    legend: 'True'
+    marker1: '-1'
+    marker10: '-1'
+    marker2: '-1'
+    marker3: '-1'
+    marker4: '-1'
+    marker5: '-1'
+    marker6: '-1'
+    marker7: '-1'
+    marker8: '-1'
+    marker9: '-1'
+    name: '""'
+    nconnections: '1'
+    size: '1024'
+    srate: samp_rate
+    stemplot: 'False'
+    style1: '1'
+    style10: '1'
+    style2: '1'
+    style3: '1'
+    style4: '1'
+    style5: '1'
+    style6: '1'
+    style7: '1'
+    style8: '1'
+    style9: '1'
+    tr_chan: '0'
+    tr_delay: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: complex
+    update_time: '0.10'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    ylabel: Amplitude
+    ymax: '1'
+    ymin: '-1'
+    yunit: '""'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1352, 956.0]
+    rotation: 0
+    state: true
 - name: snippet_auto_stop
   id: snippet
   parameters:
@@ -1909,13 +2103,14 @@ blocks:
     maxoutbuf: '0'
     minoutbuf: '0'
     num_channels: '1'
+    output_groups: '1'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
     coordinate: [1832, 472.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: usrp_ble_capture_gate_0_0
   id: usrp_ble_capture_gate
   parameters:
@@ -1926,13 +2121,14 @@ blocks:
     maxoutbuf: '0'
     minoutbuf: '0'
     num_channels: '1'
+    output_groups: '1'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
     coordinate: [1704, 1160.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: usrp_ble_capture_gate_1
   id: usrp_ble_capture_gate
   parameters:
@@ -1943,13 +2139,14 @@ blocks:
     maxoutbuf: '0'
     minoutbuf: '0'
     num_channels: '1'
+    output_groups: '1'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1840, 744.0]
+    coordinate: [1856, 752.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: usrp_ble_capture_gate_1_0
   id: usrp_ble_capture_gate
   parameters:
@@ -1960,13 +2157,14 @@ blocks:
     maxoutbuf: '0'
     minoutbuf: '0'
     num_channels: '1'
+    output_groups: '1'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1808, 984.0]
+    coordinate: [1824, 984.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: usrp_ble_data_send_0
   id: usrp_ble_data_send
   parameters:
@@ -2001,38 +2199,6 @@ blocks:
     coordinate: [88, 768.0]
     rotation: 0
     state: enabled
-- name: usrp_ble_data_store_0
-  id: usrp_ble_data_store
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    data_len: '200000'
-    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_reflector_rx_from_initiator
-    skip_len: int(0/1000*samp_rate)
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [1864, 676.0]
-    rotation: 0
-    state: disabled
-- name: usrp_ble_data_store_0_0
-  id: usrp_ble_data_store
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    data_len: '200000'
-    path: /home/lfy/workarea/zz_ble_cs_gnuradio/1to1/data_initiator_rx_from_reflector
-    skip_len: int(0/1000*samp_rate)
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [1832, 852.0]
-    rotation: 0
-    state: disabled
 - name: usrp_ble_interact_center_0
   id: usrp_ble_interact_center
   parameters:
@@ -2099,14 +2265,14 @@ connections:
 - [analog_sig_source_x_0_1, '0', usrp_ble_random_phase_1, '0']
 - [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_0, '0']
 - [blocks_multiply_conjugate_cc_0, '0', usrp_ble_capture_gate_1, '0']
-- [blocks_multiply_conjugate_cc_0, '0', usrp_ble_data_store_0, '0']
 - [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_0_0, '0']
 - [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_capture_gate_1_0, '0']
-- [blocks_multiply_conjugate_cc_0_0, '0', usrp_ble_data_store_0_0, '0']
 - [blocks_multiply_xx_0, '0', uhd_usrp_sink_0_0_0_0, '0']
 - [blocks_multiply_xx_0_0, '0', uhd_usrp_sink_0_0_0_0, '1']
 - [uhd_usrp_source_0_0, '0', blocks_multiply_conjugate_cc_0_0, '0']
+- [uhd_usrp_source_0_0, '0', qtgui_time_sink_x_0, '0']
 - [uhd_usrp_source_0_0, '1', blocks_multiply_conjugate_cc_0, '0']
+- [uhd_usrp_source_0_0, '1', qtgui_time_sink_x_1, '0']
 - [usrp_ble_capture_gate_0, '0', blocks_file_sink_0, '0']
 - [usrp_ble_capture_gate_0_0, '0', blocks_file_sink_0_0, '0']
 - [usrp_ble_capture_gate_1, '0', blocks_file_sink_1, '0']
@@ -2124,8 +2290,6 @@ connections:
 - [usrp_ble_interact_center_0, freq_ctrl, usrp_ble_random_phase_1, freq]
 - [usrp_ble_interact_center_0, send1_ctrl, usrp_ble_data_send_0, command]
 - [usrp_ble_interact_center_0, send2_ctrl, usrp_ble_data_send_0_0, command]
-- [usrp_ble_interact_center_0, store1_ctrl, usrp_ble_data_store_0, command]
-- [usrp_ble_interact_center_0, store2_ctrl, usrp_ble_data_store_0_0, command]
 - [usrp_ble_random_phase_0, '0', blocks_multiply_conjugate_cc_0_0, '1']
 - [usrp_ble_random_phase_0, '0', blocks_multiply_xx_0, '0']
 - [usrp_ble_random_phase_1, '0', blocks_multiply_conjugate_cc_0, '1']

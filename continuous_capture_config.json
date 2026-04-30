@@ -27,6 +27,8 @@
   "edge_trim_samples": 16,
   "jobs": 0,
   "no_burst_plots": false,
+  "distance_min_m": 0.0,
+  "distance_max_m": 30.0,
   "distance_step_m": 0.01,
   "match_window_m": 10.0,
   "propagation_speed_mps": 230000000.0,

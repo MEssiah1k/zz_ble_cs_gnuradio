@@ -20,6 +20,7 @@ void bind_capture_gate(py::module& m)
         .def(py::init(&capture_gate::make),
              py::arg("num_channels"),
              py::arg("group_index") = 0,
+             py::arg("output_groups") = 1,
              D(capture_gate, make))
         .def("set_group_index",
              &capture_gate::set_group_index,

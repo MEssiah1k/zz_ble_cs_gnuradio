@@ -19,7 +19,7 @@ class USRP_BLE_API capture_gate : virtual public gr::block
 public:
     typedef std::shared_ptr<capture_gate> sptr;
 
-    static sptr make(int num_channels, int group_index = 0);
+    static sptr make(int num_channels, int group_index = 0, int output_groups = 1);
     virtual void set_group_index(int group_index) = 0;
 };
 

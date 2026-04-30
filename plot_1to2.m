@@ -2,21 +2,26 @@ clc
 % clear all
 close all
 
-%root_dir = '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1';
-root_dir = '/home/lfy/workarea/zz_ble_cs_gnuradio/1to1_2sides';
+root_dir = '/home/lfy/workarea/zz_ble_cs_gnuradio/1to2';
 
 captures = {
-    'Calibration: initiator RX from reflector', ...
-    fullfile(root_dir, 'data_initiator_rx_from_reflector_calibration');
+    'Calibration: initiator RX from reflectors', ...
+    fullfile(root_dir, 'data_initiator_rx_from_reflectors_calibration');
 
-    'Calibration: reflector RX from initiator', ...
-    fullfile(root_dir, 'data_reflector_rx_from_initiator_calibration');
+    'Calibration: reflector1 RX from initiator', ...
+    fullfile(root_dir, 'data_reflector1_rx_from_initiator_calibration');
 
-    'Measurement: initiator RX from reflector', ...
-    fullfile(root_dir, 'data_initiator_rx_from_reflector_measurement');
+    'Calibration: reflector2 RX from initiator', ...
+    fullfile(root_dir, 'data_reflector2_rx_from_initiator_calibration');
 
-    'Measurement: reflector RX from initiator', ...
-    fullfile(root_dir, 'data_reflector_rx_from_initiator_measurement');
+    'Measurement: initiator RX from reflectors', ...
+    fullfile(root_dir, 'data_initiator_rx_from_reflectors_measurement');
+
+    'Measurement: reflector1 RX from initiator', ...
+    fullfile(root_dir, 'data_reflector1_rx_from_initiator_measurement');
+
+    'Measurement: reflector2 RX from initiator', ...
+    fullfile(root_dir, 'data_reflector2_rx_from_initiator_measurement');
 };
 
 for k = 1:size(captures, 1)
