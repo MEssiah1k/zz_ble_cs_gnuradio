@@ -21,4 +21,6 @@ output_diff_spectrum_1to1
 */4m
 output_spectrum_matching_test*
 DATA
-DATA.zip
+*.zip
+node*
+*/figures/
